@@ -1947,19 +1947,7 @@
             });
             const [chosenKey, setChosenKey] = useState("");
             const [muted, setMuted] = useState(false);
-            const [showGate, setShowGate] = useState(false);
             const [showVolumeControl, setShowVolumeControl] = useState(false);
-
-            // Show Instagram gate after 8 seconds (only if not seen before)
-            useEffect(() => {
-              const hasSeenGate = localStorage.getItem("instagram_gate_seen");
-              if (!hasSeenGate) {
-                const timer = setTimeout(() => {
-                  setShowGate(true);
-                }, 8000);
-                return () => clearTimeout(timer);
-              }
-            }, []);
 
             // Update audio volume when masterVolume state changes
             useEffect(() => {
@@ -2344,82 +2332,6 @@
                     },
                     "Already have an account? Sign In"
                   )
-                )
-              ),
-
-              /* Instagram Follow Gate Overlay */
-              showGate && React.createElement(
-                "div",
-                {
-                  className: "fixed inset-0 z-[9999] flex items-center justify-center",
-                  style: {
-                    background: "rgba(0, 0, 0, 0.3)",
-                    backdropFilter: "blur(2px)"
-                  }
-                },
-                React.createElement(
-                  "div",
-                  {
-                    className: "text-center px-6 py-8 max-w-2xl mx-auto",
-                    style: {
-                      background: "rgba(39, 39, 42, 0.95)",
-                      border: "2px solid rgba(99, 102, 241, 0.3)",
-                      borderRadius: "16px"
-                    }
-                  },
-                  [
-                    React.createElement(
-                      "h2",
-                      {
-                        key: "title",
-                        className: "text-3xl font-bold mb-4",
-                        style: {
-                          background: "linear-gradient(135deg, #6366f1, #8b5cf6, #a855f7)",
-                          WebkitBackgroundClip: "text",
-                          WebkitTextFillColor: "transparent",
-                          backgroundClip: "text"
-                        }
-                      },
-                      ["Welcome to ", React.createElement("br"), "Scale Finder Studio"]
-                    ),
-                    React.createElement(
-                      "p",
-                      {
-                        key: "message",
-                        className: "text-zinc-300 mb-6 text-lg"
-                      },
-                      "Follow @adrmmusic_ to unlock"
-                    ),
-                    React.createElement(
-                      "button",
-                      {
-                        key: "cta",
-                        onClick: () => {
-                          window.open("https://instagram.com/adrmmusic_", "_blank");
-                          localStorage.setItem("instagram_gate_seen", "true");
-                          setShowGate(false);
-                        },
-                        className: "px-8 py-3 rounded-lg font-semibold text-white transition-all duration-200 hover:scale-105",
-                        style: {
-                          background: "linear-gradient(135deg, #6366f1, #8b5cf6)",
-                          boxShadow: "0 4px 12px rgba(99, 102, 241, 0.4)"
-                        }
-                      },
-                      "Follow"
-                    ),
-                    React.createElement(
-                      "p",
-                      {
-                        key: "skip",
-                        className: "mt-4 text-xs text-zinc-500 cursor-pointer hover:text-zinc-400 transition-colors",
-                        onClick: () => {
-                          localStorage.setItem("instagram_gate_seen", "true");
-                          setShowGate(false);
-                        }
-                      },
-                      "or close to continue"
-                    )
-                  ]
                 )
               ),
 
