@@ -608,6 +608,19 @@
       }
 
       /* Mobile responsive fixes for iPhone SE and small screens */
+      @media (max-width: 768px) {
+        /* Move auth buttons below logo on mobile */
+        header {
+          flex-direction: column !important;
+        }
+
+        .auth-section {
+          position: static !important;
+          margin-top: 16px !important;
+          justify-content: center !important;
+        }
+      }
+
       @media (max-width: 375px) {
         body {
           overflow-x: hidden;
