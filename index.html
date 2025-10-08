@@ -1,0 +1,2622 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="Scale Finder Studio - Interactive piano tool to identify scales and keys by clicking notes" />
+    <meta name="theme-color" content="#6366f1" />
+    <title>Scale Finder Studio – Interactive Piano Scale Identifier</title>
+
+    <!-- Fonts & Tailwind -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="preconnect" href="https://unpkg.com" />
+    <link rel="preconnect" href="https://cdn.tailwindcss.com" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <style>
+      html,
+      body {
+        height: 100%;
+        margin: 0;
+      }
+      body {
+        /* Sleek, modern gradient background (desktop & mobile friendly) */
+        background: radial-gradient(
+            1200px 800px at 50% -180px,
+            rgba(124, 58, 237, 0.2),
+            rgba(124, 58, 237, 0) 60%
+          ),
+          radial-gradient(
+            900px 600px at -180px 40%,
+            rgba(99, 102, 241, 0.15),
+            rgba(99, 102, 241, 0) 60%
+          ),
+          radial-gradient(
+            900px 600px at 110% 20%,
+            rgba(37, 99, 235, 0.1),
+            rgba(37, 99, 235, 0) 55%
+          ),
+          linear-gradient(180deg, #0b0d13 0%, #0a0a10 100%);
+        background-repeat: no-repeat;
+        background-attachment: fixed;
+        background-size: 100% 100%;
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI,
+          Roboto, "Helvetica Neue", Arial;
+        overflow-x: hidden;
+      }
+
+      /* ---------- Cards / UI ---------- */
+      .card {
+        border: 1px solid rgba(120, 120, 180, 0.2);
+        background: radial-gradient(
+            120% 140% at 20% -20%,
+            rgba(99, 102, 241, 0.08),
+            rgba(99, 102, 241, 0) 40%
+          ),
+          linear-gradient(
+            180deg,
+            rgba(18, 20, 28, 0.85),
+            rgba(14, 16, 24, 0.85)
+          );
+        box-shadow: 0 12px 28px rgba(0, 0, 0, 0.45),
+          0 0 0 1px rgba(140, 140, 180, 0.16),
+          inset 0 1px 0 rgba(255, 255, 255, 0.04);
+        backdrop-filter: blur(8px);
+        padding: 0.75rem;
+        border-radius: 0.8rem;
+        will-change: transform, box-shadow, opacity;
+      }
+      
+      /* Enhanced gradient for Possible Keys section */
+      .possible-keys-card {
+        border: 1px solid rgba(120, 120, 180, 0.25);
+        background: radial-gradient(
+            140% 160% at 30% -30%,
+            rgba(124, 58, 237, 0.12),
+            rgba(124, 58, 237, 0) 50%
+          ),
+          radial-gradient(
+            100% 120% at 70% 110%,
+            rgba(99, 102, 241, 0.08),
+            rgba(99, 102, 241, 0) 45%
+          ),
+          radial-gradient(
+            80% 100% at -20% 50%,
+            rgba(37, 99, 235, 0.06),
+            rgba(37, 99, 235, 0) 50%
+          ),
+          linear-gradient(
+            135deg,
+            rgba(20, 22, 32, 0.9) 0%,
+            rgba(16, 18, 28, 0.9) 50%,
+            rgba(14, 16, 26, 0.9) 100%
+          );
+        box-shadow: 0 16px 32px rgba(0, 0, 0, 0.5),
+          0 0 0 1px rgba(140, 140, 180, 0.2),
+          inset 0 1px 0 rgba(255, 255, 255, 0.05),
+          0 0 20px rgba(99, 102, 241, 0.08);
+        backdrop-filter: blur(12px);
+        padding: 0.75rem;
+        border-radius: 0.8rem;
+        will-change: transform, box-shadow, opacity;
+      }
+      .chip {
+        transition: transform 140ms ease, background-color 160ms ease,
+          border-color 160ms ease, box-shadow 200ms ease, opacity 180ms ease;
+      }
+      .chip:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 0 0 1px rgba(99, 102, 241, 0.55),
+          inset 0 0 12px rgba(99, 102, 241, 0.1);
+        border-color: rgba(99, 102, 241, 0.55);
+      }
+      .fade-in {
+        animation: fadeInUp 0.24s ease both;
+      }
+      @keyframes fadeInUp {
+        from {
+          opacity: 0;
+          transform: translateY(2px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      /* ---------- Piano look & motion ---------- */
+      .kbd-wrap {
+        display: flex;
+        justify-content: center;
+        isolation: isolate;
+      }
+
+      .piano-card {
+        position: relative;
+        border-radius: 12px;
+      }
+
+
+      .key-white,
+      .key-black {
+        transition: transform 120ms ease, filter 120ms ease,
+          box-shadow 150ms ease, background-color 150ms ease,
+          border-color 150ms ease, color 150ms ease;
+        will-change: transform, filter, box-shadow;
+      }
+      @media (hover: hover) and (pointer: fine) {
+        .key-white:active {
+          transform: translateY(1.5px);
+        }
+        .key-black:active {
+          transform: translateY(1.5px);
+          margin-top: -1.5px !important;
+          padding-top: 1.5px !important;
+        }
+      }
+
+      /* === Selected State with Key Definition ============================= */
+      .key-white.selected {
+        background: #3730a3 !important; /* darker indigo-800 */
+        border: 2px solid #1e1b4b !important; /* much darker indigo-950 border */
+        box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1), /* subtle inner highlight */
+                    inset 0 2px 4px rgba(0, 0, 0, 0.2), /* inner shadow for depth */
+                    0 0 0 1px rgba(30, 27, 75, 0.8), /* outer definition */
+                    0 2px 8px rgba(55, 48, 163, 0.4) !important; /* glow */
+      }
+      .key-black.selected {
+        background: #3730a3 !important; /* same darker indigo-800 */
+        border: 2px solid #0c0a2a !important; /* even darker border for black keys */
+        box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.05), /* very subtle inner highlight */
+                    inset 0 2px 4px rgba(0, 0, 0, 0.3), /* stronger inner shadow */
+                    0 0 0 1px rgba(12, 10, 42, 0.9), /* outer definition */
+                    0 2px 8px rgba(55, 48, 163, 0.5) !important; /* glow */
+      }
+
+      /* === Hover State - Precise Overlay ================================== */
+      @media (hover: hover) and (pointer: fine) {
+        .key-white:hover:not(.selected) {
+          background: #6366f1 !important; /* full 100% highlight */
+          border: 2px solid #4f46e5 !important; /* indigo-600 border */
+          box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.2), /* inner highlight */
+                      inset 0 -2px 6px rgba(79, 70, 229, 0.3), /* inner glow at bottom */
+                      0 2px 8px rgba(99, 102, 241, 0.3) !important; /* subtle outer glow */
+          filter: none;
+        }
+        .key-black:hover:not(.selected) {
+          background: #6366f1 !important; /* same medium indigo-500 */
+          border: 2px solid #4338ca !important; /* darker border for black keys */
+          box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.15), /* subtle inner highlight */
+                      inset 0 -2px 6px rgba(67, 56, 202, 0.4), /* inner glow at bottom */
+                      0 2px 8px rgba(99, 102, 241, 0.4) !important; /* subtle outer glow */
+          filter: none;
+        }
+
+        /* === Hover State for SELECTED Keys ================================== */
+        .key-white.selected:hover {
+          background: linear-gradient(to bottom,
+                        rgba(55, 48, 163, 0.9) 0%,
+                        rgba(55, 48, 163, 0.9) 1%,
+                        #6366f1 1%,
+                        #6366f1 100%) !important; /* preserve selected color at top 1%, hover below */
+          border: 2px solid #4f46e5 !important; /* indigo-600 border */
+          border-top: 2px solid #1e1b4b !important; /* match selected border at top */
+          box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.25), /* stronger inner highlight */
+                      inset 0 -3px 8px rgba(79, 70, 229, 0.4), /* enhanced inner glow */
+                      0 4px 12px rgba(99, 102, 241, 0.5) !important; /* controlled outer glow */
+          transform: translateY(-1px) !important;
+        }
+        .key-black.selected:hover {
+          background: #6366f1 !important; /* same medium indigo-500 */
+          border: 2px solid #4338ca !important; /* darker border for black keys */
+          box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.2), /* inner highlight */
+                      inset 0 -3px 8px rgba(67, 56, 202, 0.5), /* enhanced inner glow */
+                      0 4px 12px rgba(99, 102, 241, 0.6) !important; /* controlled outer glow */
+          transform: translateY(-1px) !important;
+        }
+        /* Make labels readable on white-key hover/selected */
+        .key-white.selected .key-label.white,
+        .key-white:hover .key-label.white {
+          color: #fff !important;
+          text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+          font-weight: 700;
+        }
+      }
+
+      /* Deselect pulse animation */
+      @keyframes deselectPulse {
+        0% { box-shadow: 0 0 0 0 rgba(124, 58, 237, 0.6); }
+        50% { box-shadow: 0 0 0 6px rgba(124, 58, 237, 0.2); }
+        100% { box-shadow: 0 0 0 0 rgba(124, 58, 237, 0); }
+      }
+      .key-deselect-pulse {
+        animation: deselectPulse 300ms ease-out;
+      }
+
+      /* Select outline animation */
+      @keyframes selectOutline {
+        0% { 
+          border-color: #1e1b4b;
+          box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1),
+                      inset 0 2px 4px rgba(0, 0, 0, 0.2),
+                      0 0 0 1px rgba(30, 27, 75, 0.8),
+                      0 2px 8px rgba(55, 48, 163, 0.4);
+        }
+        40% { 
+          border-color: #000000 !important;
+          box-shadow: inset 0 0 0 3px rgba(255, 255, 255, 0.2),
+                      inset 0 3px 6px rgba(0, 0, 0, 0.4),
+                      0 0 0 3px rgba(0, 0, 0, 0.9),
+                      0 0 20px rgba(15, 12, 56, 0.6),
+                      0 6px 16px rgba(55, 48, 163, 0.7);
+          transform: scale(1.01);
+        }
+        100% { 
+          border-color: #1e1b4b;
+          box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1),
+                      inset 0 2px 4px rgba(0, 0, 0, 0.2),
+                      0 0 0 1px rgba(30, 27, 75, 0.8),
+                      0 2px 8px rgba(55, 48, 163, 0.4);
+          transform: scale(1);
+        }
+      }
+      .key-select-outline {
+        animation: selectOutline 250ms ease-out;
+      }
+
+      /* Key labels */
+      .key-label {
+        position: absolute;
+        left: 0;
+        right: 0;
+        text-align: center;
+        font-size: 13px;
+        line-height: 1;
+        font-weight: 700;
+        pointer-events: none;
+      }
+      .key-label.white {
+        bottom: 12px;
+        color: #3f3f46;
+      }
+      .key-label.black {
+        bottom: 12px;
+        color: #fff;
+        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.55);
+      }
+
+      /* Audio control buttons */
+      .mute-btn {
+        position: absolute;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 28px;
+        height: 28px;
+        border-radius: 8px;
+        background: linear-gradient(135deg, rgba(20, 20, 25, 0.9), rgba(15, 15, 20, 0.9));
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4),
+          inset 0 1px 0 rgba(255, 255, 255, 0.08);
+        transition: all 150ms ease;
+        color: #d1d5db;
+        cursor: pointer;
+      }
+      .mute-btn svg {
+        width: 18px;
+        height: 18px;
+      }
+      .mute-btn:hover {
+        background: linear-gradient(135deg, rgba(99, 102, 241, 0.15), rgba(20, 20, 25, 0.95));
+        border-color: rgba(99, 102, 241, 0.3);
+        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5),
+          inset 0 1px 0 rgba(255, 255, 255, 0.12);
+        transform: translateY(-1px);
+        color: #f3f4f6;
+      }
+      .mute-btn:active {
+        transform: translateY(0px);
+      }
+      .mute-btn.muted {
+        background: linear-gradient(135deg, #ef4444, #dc2626);
+        border-color: #b91c1c;
+        color: #fff;
+        box-shadow: 0 8px 20px rgba(239, 68, 68, 0.3),
+          inset 0 1px 0 rgba(255, 255, 255, 0.2);
+      }
+      .mute-btn.muted:hover {
+        background: linear-gradient(135deg, #f87171, #ef4444);
+        transform: translateY(-1px);
+      }
+      .mute-btn.active {
+        background: linear-gradient(135deg, #6366f1, #4338ca);
+        border-color: #3730a3;
+        color: #fff;
+        box-shadow: 0 8px 20px rgba(99, 102, 241, 0.4),
+          inset 0 1px 0 rgba(255, 255, 255, 0.2);
+      }
+      .mute-btn.active:hover {
+        background: linear-gradient(135deg, #7c3aed, #6366f1);
+        transform: translateY(-1px);
+      }
+
+      /* Volume control panel */
+      .volume-control {
+        position: absolute;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 14px;
+        border-radius: 10px;
+        background: linear-gradient(135deg, rgba(20, 22, 30, 0.95), rgba(15, 17, 25, 0.95));
+        border: 1px solid rgba(99, 102, 241, 0.2);
+        box-shadow: 0 12px 28px rgba(0, 0, 0, 0.5),
+          0 0 0 1px rgba(99, 102, 241, 0.1),
+          inset 0 1px 0 rgba(255, 255, 255, 0.08);
+        backdrop-filter: blur(12px);
+        z-index: 1000;
+      }
+      .volume-slider {
+        width: 85px;
+        height: 5px;
+        border-radius: 3px;
+        background: linear-gradient(to right, 
+          rgba(99, 102, 241, 0.3) 0%, 
+          rgba(99, 102, 241, 0.15) 50%,
+          rgba(255, 255, 255, 0.1) 100%);
+        outline: none;
+        -webkit-appearance: none;
+        appearance: none;
+        cursor: pointer;
+      }
+      .volume-slider::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        appearance: none;
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #6366f1, #4338ca);
+        cursor: pointer;
+        box-shadow: 0 3px 8px rgba(99, 102, 241, 0.4),
+          inset 0 1px 0 rgba(255, 255, 255, 0.3);
+        transition: all 150ms ease;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+      }
+      .volume-slider::-webkit-slider-thumb:hover {
+        transform: scale(1.15);
+        background: linear-gradient(135deg, #7c3aed, #6366f1);
+        box-shadow: 0 4px 12px rgba(99, 102, 241, 0.6),
+          inset 0 1px 0 rgba(255, 255, 255, 0.4);
+      }
+      .volume-slider::-moz-range-thumb {
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #6366f1, #4338ca);
+        cursor: pointer;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        box-shadow: 0 3px 8px rgba(99, 102, 241, 0.4);
+        transition: all 150ms ease;
+      }
+      .volume-slider::-moz-range-thumb:hover {
+        transform: scale(1.15);
+        background: linear-gradient(135deg, #7c3aed, #6366f1);
+      }
+      .volume-text {
+        font-size: 12px;
+        color: #c7d2fe;
+        font-weight: 600;
+        min-width: 32px;
+        text-align: center;
+        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+      }
+
+      /* Bottom action buttons */
+      .bottom-actions {
+        display: flex;
+        justify-content: center;
+        gap: 12px;
+        margin-top: 3rem;
+        padding: 1rem 0;
+      }
+      .bottom-btn {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 8px 16px;
+        border-radius: 8px;
+        font-size: 13px;
+        font-weight: 500;
+        text-decoration: none;
+        transition: all 150ms ease;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        background: rgba(15, 15, 20, 0.6);
+        backdrop-filter: blur(8px);
+        color: #d1d5db;
+      }
+      .bottom-btn:hover {
+        transform: translateY(-1px);
+        border-color: rgba(99, 102, 241, 0.3);
+        background: rgba(99, 102, 241, 0.1);
+        color: #e5e7eb;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+      }
+      .bottom-btn svg {
+        width: 16px;
+        height: 16px;
+      }
+      .instagram-btn:hover {
+        border-color: rgba(249, 115, 22, 0.3);
+        background: rgba(249, 115, 22, 0.1);
+      }
+
+      /* Relative key chips (unchanged) */
+      .relative-indicator {
+        display: inline-block;
+        margin-left: 6px;
+        padding: 2px 6px;
+        background: rgba(99, 102, 241, 0.2);
+        border: 1px solid rgba(99, 102, 241, 0.3);
+        border-radius: 4px;
+        font-size: 10px;
+        font-weight: 500;
+        color: #a5b4fc;
+        vertical-align: middle;
+      }
+      .scale-group {
+        position: relative;
+        padding-bottom: 0.5rem;
+        margin-bottom: 0.5rem;
+      }
+      .scale-group:not(:last-child)::after {
+        content: "";
+        position: absolute;
+        bottom: 0;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 60%;
+        height: 1px;
+        background: linear-gradient(
+          to right,
+          transparent,
+          rgba(148, 163, 184, 0.2),
+          transparent
+        );
+      }
+      .scale-group.no-separator::after {
+        display: none;
+      }
+      .scale-group.with-x-space {
+      }
+
+      @media (min-width: 769px) {
+        .grid > div[style*="position: relative"]::after {
+          content: "";
+          position: absolute;
+          right: -0.5rem;
+          top: 50%;
+          transform: translateY(-50%);
+          width: 1px;
+          height: 60%;
+          background: linear-gradient(
+            to bottom,
+            transparent,
+            rgba(148, 163, 184, 0.2),
+            rgba(148, 163, 184, 0.2),
+            transparent
+          );
+        }
+      }
+      .scale-group-label {
+        font-size: 11px;
+        font-weight: 600;
+        color: #64748b;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        margin-bottom: 0.5rem;
+        margin-left: 0.75rem;
+      }
+
+      /* Chord progression styles */
+      .chord-progression {
+        margin-top: 1.5rem;
+        padding: 1rem;
+        background: rgba(20, 20, 28, 0.4);
+        border: none;
+        border-radius: 8px;
+        max-width: 100%;
+        overflow: hidden;
+      }
+      .chord-progression-title {
+        font-size: 13px;
+        font-weight: 600;
+        color: #a1a1aa;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        margin-bottom: 0.75rem;
+        text-align: center;
+      }
+      .chord-grid {
+        display: grid;
+        grid-template-columns: repeat(7, minmax(0, 1fr));
+        gap: 9px;
+        margin-bottom: 1rem;
+        max-width: 100%;
+      }
+      .chord-item {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 6px 16px;
+        background: rgba(24, 24, 32, 0.5);
+        border: 1px solid rgba(120, 120, 180, 0.25);
+        border-radius: 6px;
+        text-align: center;
+      }
+      .chord-roman {
+        font-size: 14px;
+        font-weight: 400;
+        color: #f4f4f5;
+        margin-bottom: 3px;
+      }
+      .chord-name {
+        font-size: 13px;
+        font-weight: 500;
+        color: #d4d4d8;
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .chip,
+        .key-white,
+        .key-black,
+        .piano-card {
+          transition: none !important;
+        }
+        .fade-in {
+          animation: none !important;
+        }
+      }
+
+      #boot-error {
+        display: none;
+      }
+      #boot-error pre {
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+
+      /* Auth button styles */
+      .auth-btn:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+      }
+      .auth-btn:active {
+        transform: translateY(0);
+      }
+      .signin-btn:hover {
+        background: rgba(99, 102, 241, 0.2) !important;
+        border-color: rgba(99, 102, 241, 0.6) !important;
+      }
+      .signup-btn:hover {
+        box-shadow: 0 6px 20px rgba(99, 102, 241, 0.5) !important;
+      }
+
+      /* Mobile responsive fixes for iPhone SE and small screens */
+      @media (max-width: 375px) {
+        body {
+          overflow-x: hidden;
+        }
+
+        .piano-card {
+          overflow-x: auto;
+          overflow-y: hidden;
+          -webkit-overflow-scrolling: touch;
+          margin-left: 0 !important;
+          margin-right: 0 !important;
+        }
+
+        /* Make content areas fit mobile */
+        .mx-auto {
+          max-width: 100% !important;
+        }
+      }
+
+      @media (max-width: 390px) {
+        .piano-card {
+          padding-left: 8px !important;
+          padding-right: 8px !important;
+        }
+      }
+    </style>
+
+    <!-- React 18 UMD -->
+    <script
+      crossorigin
+      src="https://unpkg.com/react@18/umd/react.production.min.js"
+    ></script>
+    <script
+      crossorigin
+      src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"
+    ></script>
+
+    <!-- Clerk Authentication -->
+    <script
+      async
+      crossorigin="anonymous"
+      data-clerk-publishable-key="pk_test_c3VwZXJiLWJyZWFtLTkzLmNsZXJrLmFjY291bnRzLmRldiQ"
+      src="https://superb-bream-93.clerk.accounts.dev/npm/@clerk/clerk-js@latest/dist/clerk.browser.js"
+    ></script>
+  </head>
+  <body class="text-zinc-100">
+    <div id="root" class="p-4 sm:p-6">
+      <div id="booting" class="text-zinc-400 text-sm">Loading Scale Finder Studio…</div>
+      <div
+        id="boot-error"
+        class="mt-4 rounded-lg border border-red-500/40 bg-red-900/20 p-3 text-red-200"
+      >
+        <div class="font-semibold mb-1">App failed to start</div>
+        <pre id="boot-error-text"></pre>
+      </div>
+    </div>
+
+    <script>
+      (async function () {
+        function showBootError(err) {
+          try {
+            document.getElementById("booting").style.display = "none";
+            const box = document.getElementById("boot-error");
+            const pre = document.getElementById("boot-error-text");
+            pre.textContent =
+              err && (err.stack || err.message)
+                ? err.stack || err.message
+                : String(err);
+            box.style.display = "block";
+          } catch (_) {}
+        }
+
+        try {
+          // Wait for Clerk SDK to load
+          while (!window.Clerk) {
+            await new Promise(resolve => setTimeout(resolve, 50));
+          }
+
+          // Clerk is auto-initialized via data-clerk-publishable-key
+          await window.Clerk.load();
+          const clerk = window.Clerk;
+
+          const { useState, useMemo, useRef, useEffect, Fragment } = React;
+
+          /* ---------- Hooks ---------- */
+          function useWindowWidth() {
+            const getW = () =>
+              Math.min(
+                window.innerWidth,
+                document.documentElement.clientWidth || window.innerWidth
+              );
+            const [w, setW] = React.useState(getW());
+            React.useEffect(() => {
+              const on = () => setW(getW());
+              window.addEventListener("resize", on);
+              return () => window.removeEventListener("resize", on);
+            }, []);
+            return w;
+          }
+
+          /* ---------- Music theory ---------- */
+          const PITCHES = [
+            { name: "C", display: "C" },
+            { name: "C#", display: "C#" },  // Sharp side of circle
+            { name: "D", display: "D" },
+            { name: "D#", display: "E♭" },  // Flat side: Eb
+            { name: "E", display: "E" },
+            { name: "F", display: "F" },
+            { name: "F#", display: "F#" },  // Sharp side: F#
+            { name: "G", display: "G" },
+            { name: "G#", display: "A♭" },  // Flat side: Ab
+            { name: "A", display: "A" },
+            { name: "A#", display: "B♭" },  // Flat side: Bb
+            { name: "B", display: "B" },
+          ];
+
+          // Enharmonic equivalents (sharp/flat names)
+          const ENHARMONICS = {
+            1: { sharp: "C#", flat: "D♭" },   // C#/Db
+            3: { sharp: "D#", flat: "E♭" },   // D#/Eb
+            6: { sharp: "F#", flat: "G♭" },   // F#/Gb
+            8: { sharp: "G#", flat: "A♭" },   // G#/Ab
+            10: { sharp: "A#", flat: "B♭" }   // A#/Bb
+          };
+
+          // Get display name - uses flat symbols for display
+          function getKeyDisplayName(keyName, showBoth = false) {
+            // Extract root note and type
+            const parts = keyName.split(' ');
+            const rootName = parts[0];
+            const type = parts[1]; // "Major" or "Minor"
+
+            // Find pitch class number for this root
+            const pc = PITCHES.findIndex(p => p.name === rootName);
+
+            if (pc === -1) return keyName;
+
+            // Use the display name with flat symbols
+            const displayRoot = PITCHES[pc].display;
+
+            return `${displayRoot} ${type}`;
+          }
+
+          // Chord quality patterns for scale degrees
+          const MAJOR_CHORD_PATTERN = [
+            { roman: 'I', quality: 'maj' },
+            { roman: 'ii', quality: 'min' },
+            { roman: 'iii', quality: 'min' },
+            { roman: 'IV', quality: 'maj' },
+            { roman: 'V', quality: 'maj' },
+            { roman: 'vi', quality: 'min' },
+            { roman: 'vii°', quality: 'dim' }
+          ];
+
+          const MINOR_CHORD_PATTERN = [
+            { roman: 'i', quality: 'min' },
+            { roman: 'ii°', quality: 'dim' },
+            { roman: 'III', quality: 'maj' },
+            { roman: 'iv', quality: 'min' },
+            { roman: 'v', quality: 'min' },
+            { roman: 'VI', quality: 'maj' },
+            { roman: 'VII', quality: 'maj' }
+          ];
+
+          // Calculate chord progressions for a given key
+          function getChordProgressions(keyName) {
+            const parts = keyName.split(' ');
+            const rootName = parts[0];
+            const type = parts[1];
+            
+            // Find root pitch class
+            const rootPc = PITCHES.findIndex(p => p.name === rootName);
+            if (rootPc === -1) return null;
+            
+            // Get scale intervals
+            const intervals = SCALE_INTERVALS[type];
+            if (!intervals) return null;
+            
+            // Calculate chord roots for each degree
+            const chordRoots = intervals.map(interval => {
+              const pc = (rootPc + interval) % 12;
+              return PITCHES[pc].name;
+            });
+            
+            // Get chord pattern based on major/minor
+            const pattern = type === 'Major' ? MAJOR_CHORD_PATTERN : MINOR_CHORD_PATTERN;
+            
+            // Build chord list
+            const chords = chordRoots.map((root, index) => {
+              const chord = pattern[index];
+              const suffix = chord.quality === 'maj' ? '' : 
+                           chord.quality === 'min' ? 'm' : 
+                           chord.quality === 'dim' ? '°' : '';
+              
+              return {
+                roman: chord.roman,
+                name: `${root}${suffix}`,
+                root: root,
+                quality: chord.quality
+              };
+            });
+            
+            return {
+              key: keyName,
+              type: type,
+              chords: chords
+            };
+          }
+          const SCALE_INTERVALS = {
+            Major: [0, 2, 4, 5, 7, 9, 11],
+            Minor: [0, 2, 3, 5, 7, 8, 10],
+          };
+
+          const RELATIVE_KEYS = {
+            "C Major": "A Minor",
+            "C# Major": "A# Minor",
+            "D Major": "B Minor",
+            "D# Major": "C Minor",
+            "E Major": "C# Minor",
+            "F Major": "D Minor",
+            "F# Major": "D# Minor",
+            "G Major": "E Minor",
+            "G# Major": "F Minor",
+            "A Major": "F# Minor",
+            "A# Major": "G Minor",
+            "B Major": "G# Minor",
+            "A Minor": "C Major",
+            "A# Minor": "C# Major",
+            "B Minor": "D Major",
+            "C Minor": "D# Major",
+            "C# Minor": "E Major",
+            "D Minor": "F Major",
+            "D# Minor": "F# Major",
+            "E Minor": "G Major",
+            "F Minor": "G# Major",
+            "F# Minor": "A Major",
+            "G Minor": "A# Major",
+            "G# Minor": "B Major",
+          };
+
+          const fileLabel = (n) => n.replace("#", "s");
+          const FILE_LABELS = PITCHES.map((p) => fileLabel(p.name));
+          const buildScaleSet = (root, iv) =>
+            new Set(iv.map((i) => (i + root) % 12));
+          function allKeys() {
+            const out = [];
+            Object.entries(SCALE_INTERVALS).forEach(([type, iv]) => {
+              for (let r = 0; r < 12; r++)
+                out.push({
+                  name: PITCHES[r].name + " " + type,
+                  pcs: buildScaleSet(r, iv),
+                  type,
+                  root: r,
+                });
+            });
+            return out;
+          }
+          function getPossibleKeys(selected) {
+            if (selected.size === 0)
+              return { status: "all-visible", keys: allKeys() };
+            if (selected.size === 12) return { status: "all", keys: [] };
+            const keys = allKeys().filter(({ pcs }) => {
+              for (const pc of selected) if (!pcs.has(pc)) return false;
+              return true;
+            });
+            return { status: keys.length ? "some" : "none", keys };
+          }
+          const setEquals = (a, b) =>
+            a.size === b.size && [...a].every((x) => b.has(x));
+
+          /* ---------- Audio ---------- */
+          function usePianoSamples(masterVolume = 0.7) {
+            const ctxRef = useRef(null);
+            const buffers = useRef({});
+            const currentRef = useRef(null);
+            const masterGainRef = useRef(null);
+            const reverbRef = useRef(null);
+            const ensure = () => {
+              if (!ctxRef.current) {
+                ctxRef.current = new (window.AudioContext || window.webkitAudioContext)();
+                
+                // Create reverb convolver
+                reverbRef.current = ctxRef.current.createConvolver();
+                
+                // Generate impulse response for reverb
+                const length = ctxRef.current.sampleRate * 1.2; // 1.2 second reverb
+                const impulse = ctxRef.current.createBuffer(2, length, ctxRef.current.sampleRate);
+                
+                for (let channel = 0; channel < 2; channel++) {
+                  const channelData = impulse.getChannelData(channel);
+                  for (let i = 0; i < length; i++) {
+                    const decay = Math.pow(1 - (i / length), 2);
+                    channelData[i] = (Math.random() * 2 - 1) * decay * 0.1;
+                  }
+                }
+                
+                reverbRef.current.buffer = impulse;
+                
+                // Create master gain node for volume control
+                masterGainRef.current = ctxRef.current.createGain();
+                masterGainRef.current.gain.value = masterVolume;
+                
+                // Create reverb mix gain (dry/wet control)
+                const reverbGain = ctxRef.current.createGain();
+                reverbGain.gain.value = 0.05; // 5% reverb mix
+                
+                // Connect reverb chain: masterGain -> reverb -> reverbGain -> destination
+                masterGainRef.current.connect(reverbRef.current);
+                reverbRef.current.connect(reverbGain);
+                reverbGain.connect(ctxRef.current.destination);
+                
+                // Also connect direct path for dry signal
+                masterGainRef.current.connect(ctxRef.current.destination);
+              }
+              return ctxRef.current;
+            };
+
+            async function fetchDecode(url) {
+              const ctx = ensure();
+              const res = await fetch(url);
+              if (!res.ok)
+                throw new Error("HTTP " + res.status + " for " + url);
+              const arr = await res.arrayBuffer();
+              return await ctx.decodeAudioData(arr);
+            }
+            async function loadNote(label) {
+              if (buffers.current[label]) return buffers.current[label];
+              const q = "?v=" + Date.now();
+              // NOTE: Update these paths when deploying to server or different directory
+              // Current paths are configured for local development at /Users/adrm/Desktop/keyclick/
+              const tries = [
+                "assets/samples/" + label + ".mp3" + q,
+                "./assets/samples/" + label + ".mp3" + q,
+                "/Users/adrm/Desktop/keyclick/assets/samples/" + label + ".mp3" + q,
+                "samples/" + label + ".mp3" + q,
+                "./samples/" + label + ".mp3" + q,
+              ];
+              let lastErr;
+              for (const u of tries) {
+                try {
+                  const b = await fetchDecode(u);
+                  buffers.current[label] = b;
+                  return b;
+                } catch (e) {
+                  lastErr = e;
+                }
+              }
+              console.warn(
+                "[Scale Finder Studio] Failed to load sample:",
+                label,
+                lastErr
+              );
+              throw lastErr || new Error("Missing sample: " + label);
+            }
+            function stopCurrent() {
+              const n = currentRef.current;
+              if (n) {
+                try {
+                  // Fade out quickly before stopping to avoid click
+                  const ctx = ctxRef.current;
+                  if (n.gainNode) {
+                    n.gainNode.gain.cancelScheduledValues(ctx.currentTime);
+                    n.gainNode.gain.setValueAtTime(n.gainNode.gain.value, ctx.currentTime);
+                    n.gainNode.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.02); // 20ms fade-out
+                  }
+                  n.stop(ctx.currentTime + 0.02);
+                } catch {}
+                currentRef.current = null;
+              }
+            }
+            function fallback(pc) {
+              const ctx = ensure(),
+                now = ctx.currentTime;
+              stopCurrent();
+              const o = ctx.createOscillator(),
+                g = ctx.createGain();
+              o.type = "triangle";
+              const midi = 60 - (60 % 12) + pc;
+              const freq = 440 * Math.pow(2, (midi - 69) / 12);
+              o.frequency.value = freq;
+              g.gain.setValueAtTime(0.0001, now);
+              g.gain.linearRampToValueAtTime(0.5, now + 0.005);
+              g.gain.exponentialRampToValueAtTime(0.0007, now + 0.22);
+              o.connect(g);
+              // Connect through master gain node instead of directly to destination
+              g.connect(masterGainRef.current);
+              currentRef.current = o;
+              o.start(now);
+              o.stop(now + 0.25);
+            }
+            function setMasterVolume(volume) {
+              if (masterGainRef.current) {
+                masterGainRef.current.gain.setValueAtTime(volume, ctxRef.current.currentTime);
+              }
+            }
+            
+            async function playScale(pitchClasses, ascending = true, bpm = 120) {
+              if (!pitchClasses || pitchClasses.length === 0) return;
+              
+              const ctx = ensure();
+              if (ctx.state === "suspended") await ctx.resume();
+              
+              const noteInterval = 60 / bpm; // Time between notes in seconds
+              const sortedPcs = ascending 
+                ? [...pitchClasses].sort((a, b) => a - b)
+                : [...pitchClasses].sort((a, b) => b - a);
+              
+              // Stop any currently playing scale
+              stopCurrent();
+              
+              for (let i = 0; i < sortedPcs.length; i++) {
+                const pc = sortedPcs[i];
+                const startTime = ctx.currentTime + (i * noteInterval);
+                
+                try {
+                  const label = fileLabel(PITCHES[pc].name);
+                  const buf = await loadNote(label);
+                  
+                  const src = ctx.createBufferSource();
+                  src.buffer = buf;
+                  src.connect(masterGainRef.current);
+                  src.start(startTime);
+                  
+                  // Store reference to last note for cleanup
+                  if (i === sortedPcs.length - 1) {
+                    setTimeout(() => {
+                      currentRef.current = null;
+                    }, (noteInterval * 1000) + 1000); // Clear after last note + 1s
+                  }
+                } catch {
+                  // Fallback to synthesized tone if sample fails
+                  const o = ctx.createOscillator();
+                  const g = ctx.createGain();
+                  
+                  o.type = "triangle";
+                  const midi = 60 - (60 % 12) + pc;
+                  const freq = 440 * Math.pow(2, (midi - 69) / 12);
+                  o.frequency.value = freq;
+                  
+                  g.gain.setValueAtTime(0.0001, startTime);
+                  g.gain.linearRampToValueAtTime(0.3, startTime + 0.01);
+                  g.gain.exponentialRampToValueAtTime(0.001, startTime + 0.4);
+                  
+                  o.connect(g);
+                  g.connect(masterGainRef.current);
+                  
+                  o.start(startTime);
+                  o.stop(startTime + 0.5);
+                }
+              }
+            }
+            async function playPc(pc, muted) {
+              if (muted) return;
+              const ctx = ensure();
+              if (ctx.state === "suspended") await ctx.resume();
+              const label = fileLabel(PITCHES[pc].name);
+              try {
+                const buf = await loadNote(label);
+                stopCurrent();
+                const src = ctx.createBufferSource();
+                src.buffer = buf;
+
+                // Add fade-in and fade-out gain to smooth the attack and release
+                const fadeGain = ctx.createGain();
+                const duration = buf.duration;
+                const now = ctx.currentTime;
+
+                fadeGain.gain.setValueAtTime(0, now);
+                fadeGain.gain.linearRampToValueAtTime(1, now + 0.05); // 50ms fade-in
+                fadeGain.gain.setValueAtTime(1, now + duration - 0.1); // Hold until near end
+                fadeGain.gain.linearRampToValueAtTime(0, now + duration); // 100ms fade-out
+
+                src.connect(fadeGain);
+                fadeGain.connect(masterGainRef.current);
+                src.gainNode = fadeGain; // Store gain node reference for stopCurrent
+                currentRef.current = src;
+                src.start();
+                src.stop(now + duration); // Stop at natural end with fade-out
+              } catch {
+                fallback(pc);
+              }
+            }
+            // Preload all samples on component mount
+            useEffect(() => {
+              const preloadSamples = async () => {
+                console.log('[Scale Finder Studio] Preloading audio samples...');
+                const loadPromises = FILE_LABELS.map(async (label) => {
+                  try {
+                    await loadNote(label);
+                    console.log(`[Scale Finder Studio] Loaded: ${label}.mp3`);
+                    return { label, success: true };
+                  } catch (err) {
+                    console.warn(`[Scale Finder Studio] Failed to load: ${label}.mp3`, err);
+                    return { label, success: false, error: err };
+                  }
+                });
+                
+                const results = await Promise.allSettled(loadPromises);
+                const successful = results.filter(r => r.status === 'fulfilled' && r.value.success).length;
+                const failed = results.length - successful;
+                
+                console.log(`[Scale Finder Studio] Audio preload complete: ${successful} successful, ${failed} failed`);
+                
+                // Store preload results for debugging
+                window.SCALE_FINDER_AUDIO_STATUS = {
+                  totalSamples: FILE_LABELS.length,
+                  loadedSamples: successful,
+                  failedSamples: failed,
+                  loadedBuffers: Object.keys(buffers.current)
+                };
+              };
+              
+              preloadSamples();
+            }, []);
+            return { playPc, stopCurrent, setMasterVolume, playScale };
+          }
+
+          /* ---------- Selection ---------- */
+          function usePitchSelection() {
+            const [selected, setSelected] = useState(new Set());
+            const toggle = (pc) =>
+              setSelected((prev) => {
+                const n = new Set(prev);
+                n.has(pc) ? n.delete(pc) : n.add(pc);
+                return n;
+              });
+            const reset = () => setSelected(new Set());
+            const setFromPcs = (pcs) => setSelected(new Set(pcs));
+            return { selected, toggle, reset, setFromPcs };
+          }
+
+          /* ---------- Piano UI ---------- */
+          const WHITE_PCS = [0, 2, 4, 5, 7, 9, 11];
+          const BLACK_FOR_WHITE = {
+            0: 1,
+            2: 3,
+            4: null,
+            5: 6,
+            7: 8,
+            9: 10,
+            11: null,
+          };
+
+          function Piano({ selected, onKey, onHover, keyWidth = 64 }) {
+            const whiteW = keyWidth;
+            const whiteH = Math.round(keyWidth * 3.75);
+            const blackW = Math.round(whiteW * 0.72);
+            const blackH = Math.round(whiteH * 0.68);
+
+            return React.createElement(
+              "div",
+              { className: "kbd-wrap" },
+              React.createElement(
+                "div",
+                { className: "relative flex" },
+                WHITE_PCS.map((w) => {
+                  const pc = w,
+                    blackPc = BLACK_FOR_WHITE[w],
+                    hasBlack = blackPc !== null && blackPc !== undefined;
+                  const isActive = selected.has(pc);
+                  const left = Math.round(whiteW - blackW / 2);
+
+                  return React.createElement(
+                    "div",
+                    {
+                      key: pc,
+                      className: "relative",
+                      style: { width: whiteW },
+                    },
+                    [
+                      /* White key */
+                      React.createElement(
+                        "button",
+                        {
+                          key: "w",
+                          onClick: () => onKey(pc),
+                          onMouseEnter: () => onHover && onHover(pc),
+                          className:
+                            "key-white relative z-0 border shadow-sm transition " +
+                            (isActive
+                              ? "selected border-indigo-600 bg-indigo-500"
+                              : "border-zinc-300 bg-gradient-to-b from-zinc-50 to-white") +
+                            " rounded-b-[12px]",
+                          style: { width: whiteW, height: whiteH },
+                          "aria-pressed": isActive,
+                          "data-pitch": pc,
+                          title: PITCHES[pc].name,
+                        },
+                        React.createElement(
+                          "span",
+                          {
+                            className:
+                              "key-label white" +
+                              (isActive ? " !text-white" : ""),
+                          },
+                          PITCHES[pc].display
+                        )
+                      ),
+
+                      /* Black key */
+                      hasBlack &&
+                        (function () {
+                          const activeB = selected.has(blackPc);
+                          return React.createElement(
+                            "button",
+                            {
+                              key: "b",
+                              onClick: (e) => {
+                                e.stopPropagation();
+                                onKey(blackPc);
+                              },
+                              onMouseEnter: (e) => {
+                                e.stopPropagation();
+                                onHover && onHover(blackPc);
+                              },
+                              className:
+                                "key-black absolute -top-0 z-50 shadow-lg transition " +
+                                (activeB
+                                  ? "selected bg-indigo-600 border-indigo-600"
+                                  : "border border-zinc-900 bg-[linear-gradient(to_bottom,#1c1c20,#050507)]"),
+                              style: {
+                                left,
+                                width: blackW,
+                                height: blackH,
+                                borderRadius: "0 0 12px 12px",
+                              },
+                              "aria-pressed": activeB,
+                              "data-pitch": blackPc,
+                              title: PITCHES[blackPc]?.name,
+                            },
+                            React.createElement(
+                              "span",
+                              { className: "key-label black" },
+                              PITCHES[blackPc].display
+                            )
+                          );
+                        })(),
+                    ]
+                  );
+                })
+              )
+            );
+          }
+
+          /* ---------- Components ---------- */
+          function KeysReadout({
+            result,
+            onSelectKey,
+            selectedKey,
+            onApplyScale,
+            onSave,
+            onReset,
+          }) {
+            const [songLabel, setSongLabel] = useState("");
+            const [showChords, setShowChords] = useState(false);
+            const groupedKeys = useMemo(() => {
+              const major = result.keys.filter((k) => k.type === "Major");
+              const minor = result.keys.filter((k) => k.type === "Minor");
+              return { major, minor };
+            }, [result.keys]);
+
+            // Don't show anything if all keys are visible (no notes selected)
+            if (result.status === "all-visible") {
+              return null;
+            }
+            if (result.status === "all") {
+              return React.createElement(
+                "p",
+                { className: "text-zinc-400 text-center" },
+                "All notes selected. No key can be determined."
+              );
+            }
+            if (result.status === "none") {
+              return React.createElement(
+                "p",
+                { className: "text-zinc-400 text-center" },
+                "No matching keys found for that combination."
+              );
+            }
+
+            const showRelativeIndicator =
+              result.keys.length === 2 &&
+              groupedKeys.major.length === 1 &&
+              groupedKeys.minor.length === 1;
+
+            const showSavePanel = selectedKey && selectedKey.trim() !== "";
+
+            // Only show "Possible Keys" title when there are multiple keys (not counting relative major/minor pair)
+            const totalKeys = groupedKeys.major.length + groupedKeys.minor.length;
+            const isRelativePairOnly = totalKeys === 2 && showRelativeIndicator;
+            const showTitle = totalKeys > 1 && !isRelativePairOnly;
+
+            return React.createElement("div", {
+              className: "fade-in" + (isRelativePairOnly ? " flex flex-row justify-center items-center h-full gap-2 w-full" : ""),
+              style: isRelativePairOnly ? { paddingTop: "1rem" } : {}
+            }, [
+              showTitle && React.createElement(
+                "p",
+                {
+                  key: "title",
+                  className:
+                    "mb-3 text-[18px] font-semibold tracking-tight text-zinc-100 uppercase",
+                },
+                "Detected Keys"
+              ),
+
+              groupedKeys.major.length > 0 &&
+                React.createElement(
+                  "div",
+                  { key: "major-group", className: "scale-group no-separator" },
+                  [
+                    !showRelativeIndicator &&
+                      React.createElement(
+                        "div",
+                        { key: "major-label", className: "scale-group-label" },
+                        "Major"
+                      ),
+                    React.createElement(
+                      "div",
+                      { key: "major-chips", className: "flex flex-wrap gap-2 justify-center" },
+                      groupedKeys.major.map((k) =>
+                        React.createElement(
+                          "div",
+                          {
+                            key: k.name,
+                            className: "flex items-center justify-center relative gap-2",
+                          },
+                          [
+                            React.createElement(
+                              "div",
+                              { key: "button-wrapper", className: "flex flex-col items-center gap-1" },
+                              [
+                                React.createElement(
+                                  "button",
+                                  {
+                                    key: "chip",
+                                    className:
+                                      "chip rounded-full border shadow " +
+                                      (isRelativePairOnly ? "px-7 py-4 text-[21px]" : "px-3 py-1.5 text-[14px]") +
+                                      " font-semibold " +
+                                      (selectedKey === k.name
+                                        ? "border-indigo-500 bg-indigo-500/20 text-indigo-200"
+                                        : "border-zinc-800 bg-zinc-900/60 text-zinc-200 hover:bg-zinc-900"),
+                                    onClick: () => {
+                                      onSelectKey && onSelectKey(k.name);
+                                      onApplyScale && onApplyScale(k);
+                                    },
+                                  },
+                                  getKeyDisplayName(k.name)
+                                ),
+                                isRelativePairOnly &&
+                                  React.createElement(
+                                    "div",
+                                    { key: "subtitle", className: "text-[10px] opacity-0 font-normal text-center" },
+                                    "placeholder"
+                                  )
+                              ]
+                            ),
+                            isRelativePairOnly &&
+                              React.createElement(
+                                "button",
+                                {
+                                  key: "reset",
+                                  onClick: selectedKey === k.name ? onReset : undefined,
+                                  className:
+                                    "transition-opacity duration-200 rounded-md hover:bg-zinc-800/50 p-1 " +
+                                    (selectedKey === k.name ? "opacity-50 hover:opacity-100 cursor-pointer" : "opacity-0 pointer-events-none"),
+                                  title: selectedKey === k.name ? "Reset selection" : "",
+                                },
+                                React.createElement(
+                                  "svg",
+                                  {
+                                    width: "14",
+                                    height: "14",
+                                    viewBox: "0 0 24 24",
+                                    fill: "none",
+                                    stroke: "currentColor",
+                                    strokeWidth: "3",
+                                    className: "text-zinc-400",
+                                  },
+                                  React.createElement("path", {
+                                    strokeLinecap: "round",
+                                    strokeLinejoin: "round",
+                                    d: "M18 6L6 18M6 6l12 12",
+                                  })
+                                )
+                              ),
+                          ]
+                        )
+                      )
+                    ),
+                  ]
+                ),
+
+              groupedKeys.minor.length > 0 &&
+                React.createElement(
+                  "div",
+                  { key: "minor-group", className: "scale-group" + (isRelativePairOnly ? " with-x-space" : "") },
+                  [
+                    !showRelativeIndicator &&
+                      React.createElement(
+                        "div",
+                        { key: "minor-label", className: "scale-group-label" },
+                        "Minor"
+                      ),
+                    React.createElement(
+                      "div",
+                      { key: "minor-chips", className: "flex flex-wrap gap-2 justify-center" },
+                      groupedKeys.minor.map((k) =>
+                        React.createElement(
+                          "div",
+                          {
+                            key: k.name,
+                            className: "flex items-center justify-center relative gap-2",
+                          },
+                          [
+                            React.createElement(
+                              "div",
+                              { key: "button-wrapper", className: "flex flex-col items-center gap-1" },
+                              [
+                                React.createElement(
+                                  "button",
+                                  {
+                                    key: "chip",
+                                    className:
+                                      "chip rounded-full border shadow " +
+                                      (isRelativePairOnly ? "px-7 py-4 text-[21px]" : "px-3 py-1.5 text-[14px]") +
+                                      " font-semibold " +
+                                      (selectedKey === k.name
+                                        ? "border-indigo-500 bg-indigo-500/20 text-indigo-200"
+                                        : "border-zinc-800 bg-zinc-900/60 text-zinc-200 hover:bg-zinc-900"),
+                                    onClick: () => {
+                                      onSelectKey && onSelectKey(k.name);
+                                      onApplyScale && onApplyScale(k);
+                                    },
+                                  },
+                                  isRelativePairOnly
+                                    ? getKeyDisplayName(k.name)
+                                    : [
+                                        getKeyDisplayName(k.name),
+                                        showRelativeIndicator &&
+                                          React.createElement(
+                                            "span",
+                                            { key: "rel", className: "relative-indicator" },
+                                            "relative minor"
+                                          ),
+                                      ]
+                                ),
+                                isRelativePairOnly &&
+                                  React.createElement(
+                                    "div",
+                                    { key: "subtitle", className: "text-[10px] opacity-60 font-normal text-center" },
+                                    "relative minor"
+                                  )
+                              ]
+                            ),
+                            isRelativePairOnly &&
+                              React.createElement(
+                                "button",
+                                {
+                                  key: "reset",
+                                  onClick: selectedKey === k.name ? onReset : undefined,
+                                  className:
+                                    "transition-opacity duration-200 rounded-md hover:bg-zinc-800/50 p-1 " +
+                                    (selectedKey === k.name ? "opacity-50 hover:opacity-100 cursor-pointer" : "opacity-0 pointer-events-none"),
+                                  title: selectedKey === k.name ? "Reset selection" : "",
+                                },
+                                React.createElement(
+                                  "svg",
+                                  {
+                                    width: "14",
+                                    height: "14",
+                                    viewBox: "0 0 24 24",
+                                    fill: "none",
+                                    stroke: "currentColor",
+                                    strokeWidth: "3",
+                                    className: "text-zinc-400",
+                                  },
+                                  React.createElement("path", {
+                                    strokeLinecap: "round",
+                                    strokeLinejoin: "round",
+                                    d: "M18 6L6 18M6 6l12 12",
+                                  })
+                                )
+                              ),
+                          ]
+                        )
+                      )
+                    ),
+                  ]
+                ),
+
+            ]);
+          }
+
+          // Chord Progressions Component - separate from KeysReadout
+          function ChordProgressions({ result, chosenKey, muted, playPc }) {
+            const [showChords, setShowChords] = useState(true); // Default to expanded
+
+            // Hide on mobile/touch devices
+            if ('ontouchstart' in window || navigator.maxTouchPoints > 0) {
+              return null;
+            }
+
+            const groupedKeys = useMemo(() => {
+              const major = result.keys.filter((k) => k.type === "Major");
+              const minor = result.keys.filter((k) => k.type === "Minor");
+              return { major, minor };
+            }, [result.keys]);
+
+            // Only show when exactly one key remains
+            if (groupedKeys.major.length !== 1 && groupedKeys.minor.length !== 1) {
+              return null;
+            }
+
+            // Use chosenKey if set, otherwise default to the single key available
+            let keyToShow;
+            if (chosenKey) {
+              keyToShow = result.keys.find(k => k.name === chosenKey);
+            } else {
+              keyToShow = groupedKeys.major.length === 1 ? groupedKeys.major[0] : groupedKeys.minor[0];
+            }
+
+            if (!keyToShow) return null;
+            const progressions = getChordProgressions(keyToShow.name);
+
+            if (!progressions) return null;
+
+            return React.createElement(
+              "div",
+              {
+                className: "fade-in",
+              },
+              [
+                React.createElement(
+                  "div",
+                  {
+                    key: "chord-content",
+                    className: "chord-progression",
+                  },
+                  [
+                    React.createElement(
+                      "div",
+                      {
+                        key: "grid",
+                        className: "chord-grid",
+                      },
+                      progressions.chords.map((chord, index) =>
+                        React.createElement(
+                          "div",
+                          {
+                            key: index,
+                            className: "chord-item",
+                          },
+                          [
+                            React.createElement(
+                              "div",
+                              {
+                                key: "roman",
+                                className: "chord-roman",
+                              },
+                              chord.roman
+                            ),
+                            React.createElement(
+                              "div",
+                              {
+                                key: "name",
+                                className: "chord-name",
+                              },
+                              chord.name
+                            ),
+                          ]
+                        )
+                      )
+                    ),
+                    React.createElement(
+                      "p",
+                      {
+                        key: "title",
+                        className: "mt-3 text-[12px] font-normal tracking-tight text-zinc-400 text-center",
+                      },
+                      `Chords in the Key of ${getKeyDisplayName(keyToShow.name)}`
+                    )
+                  ]
+                ),
+              ]
+            );
+          }
+
+
+          function HistoryLog({ history, onDelete, onClear }) {
+            const [isCollapsed, setIsCollapsed] = useState(true); // Start collapsed
+            if (!history.length) return null;
+            
+            return React.createElement(
+              "div",
+              { className: "card fade-in" },
+              React.createElement(
+                "div",
+                { className: "mb-2 flex items-center justify-between" },
+                React.createElement(
+                  "h2",
+                  { className: "text-[15px] font-semibold text-zinc-200" },
+                  "Saved Songs"
+                ),
+                React.createElement(
+                  "button",
+                  {
+                    onClick: () => setIsCollapsed(!isCollapsed),
+                    className:
+                      "p-1.5 rounded-md bg-zinc-800/20 hover:bg-zinc-800/60 border border-zinc-700/30 hover:border-zinc-600 transition-all duration-200",
+                    title: isCollapsed ? "Expand" : "Collapse",
+                  },
+                  React.createElement(
+                    "svg",
+                    {
+                      width: "16",
+                      height: "16",
+                      viewBox: "0 0 24 24",
+                      fill: "none",
+                      stroke: "currentColor",
+                      strokeWidth: "2",
+                      className: `text-zinc-400 transition-transform duration-200 ${
+                        isCollapsed ? "rotate-0" : "rotate-90"
+                      }`,
+                    },
+                    React.createElement("path", {
+                      strokeLinecap: "round",
+                      strokeLinejoin: "round",
+                      d: "M9 18l6-6-6-6",
+                    })
+                  )
+                )
+              ),
+              !isCollapsed &&
+                React.createElement(
+                  "div",
+                  {
+                    className: "transition-all duration-300 ease-in-out overflow-hidden",
+                  },
+                  [
+                    React.createElement(
+                      "div",
+                      { 
+                        key: "clear-section",
+                        className: "mb-3 flex justify-end"
+                      },
+                      React.createElement(
+                        "button",
+                        {
+                          onClick: onClear,
+                          className:
+                            "rounded-lg border border-zinc-700 px-3 py-1 text-xs text-zinc-300 hover:bg-zinc-800",
+                        },
+                        "Clear all"
+                      )
+                    ),
+                    React.createElement(
+                      "ul",
+                      { 
+                        key: "songs-list",
+                        className: "space-y-1 text-zinc-300" 
+                      },
+                    history.map((h, i) =>
+                      React.createElement(
+                        "li",
+                        {
+                          key: i,
+                          className:
+                            "flex items-center justify-between gap-3 rounded-lg border border-zinc-800 bg-zinc-950/40 px-3 py-1.5",
+                        },
+                        React.createElement(
+                          "div",
+                          { className: "flex-1 truncate" },
+                          React.createElement(
+                            "div",
+                            { className: "truncate text-sm" },
+                            h.label || "Untitled"
+                          ),
+                          React.createElement(
+                            "div",
+                            { className: "text-xs text-indigo-300" },
+                            h.key
+                          )
+                        ),
+                        React.createElement(
+                          "button",
+                          {
+                            onClick: () => onDelete(i),
+                            className:
+                              "rounded-md border border-zinc-700 px-2 py-1 text-xs text-zinc-300 hover:bg-zinc-800",
+                          },
+                          "Delete"
+                        )
+                      )
+                    )
+                    ),
+                  ]
+                )
+            );
+          }
+
+          /* ---------- App ---------- */
+          function App() {
+            const { selected, toggle, reset, setFromPcs } = usePitchSelection();
+            const [masterVolume, setMasterVolume] = useState(0.7);
+            const { playPc, setMasterVolume: updateAudioVolume, playScale } = usePianoSamples(masterVolume);
+            const result = useMemo(() => getPossibleKeys(selected), [selected]);
+
+            const [history, setHistory] = useState(() => {
+              try {
+                const raw = localStorage.getItem("keyclicker_history");
+                return raw ? JSON.parse(raw) : [];
+              } catch {
+                return [];
+              }
+            });
+            const [chosenKey, setChosenKey] = useState("");
+            const [muted, setMuted] = useState(false);
+            const [showGate, setShowGate] = useState(false);
+            const [showVolumeControl, setShowVolumeControl] = useState(false);
+
+            // Show Instagram gate after 8 seconds (only if not seen before)
+            useEffect(() => {
+              const hasSeenGate = localStorage.getItem("instagram_gate_seen");
+              if (!hasSeenGate) {
+                const timer = setTimeout(() => {
+                  setShowGate(true);
+                }, 8000);
+                return () => clearTimeout(timer);
+              }
+            }, []);
+
+            // Update audio volume when masterVolume state changes
+            useEffect(() => {
+              updateAudioVolume(masterVolume);
+            }, [masterVolume, updateAudioVolume]);
+
+            const handleVolumeChange = (e) => {
+              const newVolume = parseFloat(e.target.value);
+              setMasterVolume(newVolume);
+            };
+
+            // Hover-to-play functionality with debounce
+            const [hoverTimeout, setHoverTimeout] = useState(null);
+
+            const handleHover = (pc) => {
+              // Disable hover on mobile/touch devices
+              if ('ontouchstart' in window || navigator.maxTouchPoints > 0) {
+                return;
+              }
+
+              // Clear any existing timeout
+              if (hoverTimeout) {
+                clearTimeout(hoverTimeout);
+              }
+
+              // Set new timeout for 100ms delay
+              const timeoutId = setTimeout(() => {
+                if (!muted) {
+                  playPc(pc, false);
+                }
+                setHoverTimeout(null);
+              }, 100);
+
+              setHoverTimeout(timeoutId);
+            };
+
+            // Clean up timeout on unmount
+            useEffect(() => {
+              return () => {
+                if (hoverTimeout) {
+                  clearTimeout(hoverTimeout);
+                }
+              };
+            }, [hoverTimeout]);
+
+            // Hide volume control when clicking outside
+            useEffect(() => {
+              const handleClickOutside = (event) => {
+                // Check if click is on volume control elements
+                const volumeControl = event.target.closest('.volume-control');
+                const volumeButton = event.target.closest('[data-volume-btn]');
+                
+                // If click is not on volume-related elements, hide the control
+                if (!volumeControl && !volumeButton && showVolumeControl) {
+                  setShowVolumeControl(false);
+                }
+              };
+
+              if (showVolumeControl) {
+                document.addEventListener('click', handleClickOutside);
+                return () => {
+                  document.removeEventListener('click', handleClickOutside);
+                };
+              }
+            }, [showVolumeControl]);
+
+            const handleShare = async () => {
+              // Hide volume control when clicking share
+              setShowVolumeControl(false);
+              
+              if (navigator.share) {
+                try {
+                  await navigator.share({
+                    title: 'Scale Finder Studio',
+                    text: 'Check out this interactive piano scale finder!',
+                    url: window.location.href
+                  });
+                } catch (err) {
+                  if (err.name !== 'AbortError') {
+                    console.log('Share failed:', err);
+                  }
+                }
+              } else {
+                // Fallback: copy URL to clipboard
+                try {
+                  await navigator.clipboard.writeText(window.location.href);
+                  // Could show a toast notification here
+                  console.log('URL copied to clipboard');
+                } catch (err) {
+                  console.log('Copy failed:', err);
+                }
+              }
+            };
+            
+            // Auto-select key when narrowed down to one choice via piano
+            useEffect(() => {
+              const majorKeys = result.keys.filter(k => k.type === "Major");
+              const minorKeys = result.keys.filter(k => k.type === "Minor");
+              
+              // Clear selection immediately if conditions no longer match
+              if (chosenKey) {
+                const keyExists = result.keys.find(k => k.name === chosenKey);
+                const shouldAutoSelect = (majorKeys.length === 1) || (majorKeys.length === 0 && minorKeys.length === 1);
+                
+                if (!keyExists || !shouldAutoSelect) {
+                  setChosenKey("");
+                  return; // Exit early to prevent auto-selection
+                }
+              }
+              
+              // Small delay before auto-selecting to smooth transitions
+              const timeoutId = setTimeout(() => {
+                // Auto-select if there's exactly one major key and no key is chosen
+                if (majorKeys.length === 1 && !chosenKey) {
+                  setChosenKey(majorKeys[0].name);
+                }
+                // Auto-select if there's exactly one minor key (and no major keys) and no key is chosen
+                else if (majorKeys.length === 0 && minorKeys.length === 1 && !chosenKey) {
+                  setChosenKey(minorKeys[0].name);
+                }
+              }, 150); // 150ms delay for smooth transition
+              
+              return () => clearTimeout(timeoutId);
+            }, [result.keys, chosenKey]);
+            
+            useEffect(() => {
+              try {
+                localStorage.setItem(
+                  "keyclicker_history",
+                  JSON.stringify(history)
+                );
+              } catch {}
+            }, [history]);
+
+            // logo with fallbacks - use text fallback by default since image doesn't exist
+            useEffect(() => {
+              const img = document.getElementById("kc-logo-img");
+              const fb = document.getElementById("kc-logo-fallback");
+              if (!img || !fb) return;
+
+              // Show text fallback immediately
+              img.style.display = "none";
+              fb.style.display = "inline-block";
+            }, []);
+
+            // Mount Clerk user button when user is signed in
+            useEffect(() => {
+              const userButtonDiv = document.getElementById("clerk-user-button");
+              if (clerk.user && userButtonDiv) {
+                clerk.mountUserButton(userButtonDiv);
+              }
+            }, [clerk.user]);
+
+            const ww = useWindowWidth();
+            const isDesktop = ww >= 1024;
+            const outerPad = 32;
+            const wAvail = Math.max(320, ww - outerPad * 2);
+
+            const laneWidth = Math.min(
+              650,
+              Math.max(360, Math.min(wAvail - 16, 650))
+            );
+
+            // Make piano match the laneWidth
+            const pianoWidth = laneWidth;
+            const keyW = Math.floor(pianoWidth / 7);
+
+            const topGap = 16;
+            const rightGap = Math.round(topGap + keyW / 20);
+            const rightGapMobile = Math.round(2 + keyW * 0.18);
+
+            function MuteIcon({ muted }) {
+              return muted
+                ? React.createElement(
+                    "svg",
+                    {
+                      viewBox: "0 0 24 24",
+                      fill: "none",
+                      stroke: "currentColor",
+                      strokeWidth: "2",
+                    },
+                    // Muted: Clean speaker with X
+                    React.createElement("polygon", {
+                      points: "11,5 6,9 2,9 2,15 6,15 11,19",
+                      fill: "currentColor",
+                      stroke: "none"
+                    }),
+                    // Clean X mark
+                    React.createElement("line", {
+                      x1: "17", y1: "7", x2: "23", y2: "13",
+                      strokeWidth: "3",
+                      strokeLinecap: "round"
+                    }),
+                    React.createElement("line", {
+                      x1: "23", y1: "7", x2: "17", y2: "13",
+                      strokeWidth: "3", 
+                      strokeLinecap: "round"
+                    })
+                  )
+                : React.createElement(
+                    "svg",
+                    {
+                      viewBox: "0 0 24 24",
+                      fill: "none",
+                      stroke: "currentColor",
+                      strokeWidth: "2",
+                    },
+                    // Unmuted: Clean speaker with sound waves
+                    React.createElement("polygon", {
+                      points: "11,5 6,9 2,9 2,15 6,15 11,19",
+                      fill: "currentColor",
+                      stroke: "none"
+                    }),
+                    React.createElement("path", {
+                      d: "M15.54 8.46a5 5 0 0 1 0 7.07",
+                      strokeLinecap: "round",
+                      strokeLinejoin: "round"
+                    }),
+                    React.createElement("path", {
+                      d: "M19.07 4.93a10 10 0 0 1 0 14.14",
+                      strokeLinecap: "round", 
+                      strokeLinejoin: "round"
+                    })
+                  );
+            }
+
+            const handleKey = (pc) => {
+              // Hide volume control when clicking piano keys
+              setShowVolumeControl(false);
+              
+              const selecting = !selected.has(pc);
+              const keyElements = document.querySelectorAll(`[data-pitch="${pc}"]`);
+              
+              if (selecting) {
+                // Add darker outline animation for selecting
+                keyElements.forEach(el => {
+                  el.classList.add('key-select-outline');
+                  setTimeout(() => el.classList.remove('key-select-outline'), 250);
+                });
+              } else {
+                // Add pulse animation for deselecting
+                keyElements.forEach(el => {
+                  el.classList.add('key-deselect-pulse');
+                  setTimeout(() => el.classList.remove('key-deselect-pulse'), 300);
+                });
+              }
+              
+              toggle(pc);
+              if (selecting && !muted) playPc(pc, false);
+            };
+
+            const applyScale = (k) => {
+              // Hide volume control when clicking scale chips
+              setShowVolumeControl(false);
+
+              const pcs = k.pcs;
+              // Don't toggle off if already selected - just keep it selected and play sound
+              if (setEquals(selected, pcs)) {
+                if (!muted) playPc(k.root, false);
+              } else {
+                setFromPcs(Array.from(pcs));
+                setChosenKey(k.name);
+                if (!muted) playPc(k.root, false);
+              }
+            };
+
+            const resetSelection = () => {
+              // Hide volume control when clicking reset button
+              setShowVolumeControl(false);
+              
+              setFromPcs([]);
+              setChosenKey("");
+            };
+
+
+            return React.createElement(
+              "div",
+              { className: "min-h-screen w-full" },
+
+              /* Instagram Follow Gate Overlay */
+              showGate && React.createElement(
+                "div",
+                {
+                  className: "fixed inset-0 z-[9999] flex items-center justify-center",
+                  style: {
+                    background: "rgba(0, 0, 0, 0.3)",
+                    backdropFilter: "blur(2px)"
+                  }
+                },
+                React.createElement(
+                  "div",
+                  {
+                    className: "text-center px-6 py-8 max-w-2xl mx-auto",
+                    style: {
+                      background: "rgba(39, 39, 42, 0.95)",
+                      border: "2px solid rgba(99, 102, 241, 0.3)",
+                      borderRadius: "16px"
+                    }
+                  },
+                  [
+                    React.createElement(
+                      "h2",
+                      {
+                        key: "title",
+                        className: "text-3xl font-bold mb-4",
+                        style: {
+                          background: "linear-gradient(135deg, #6366f1, #8b5cf6, #a855f7)",
+                          WebkitBackgroundClip: "text",
+                          WebkitTextFillColor: "transparent",
+                          backgroundClip: "text"
+                        }
+                      },
+                      ["Welcome to ", React.createElement("br"), "Scale Finder Studio"]
+                    ),
+                    React.createElement(
+                      "p",
+                      {
+                        key: "message",
+                        className: "text-zinc-300 mb-6 text-lg"
+                      },
+                      "Follow @adrmmusic_ to unlock"
+                    ),
+                    React.createElement(
+                      "button",
+                      {
+                        key: "cta",
+                        onClick: () => {
+                          window.open("https://instagram.com/adrmmusic_", "_blank");
+                          localStorage.setItem("instagram_gate_seen", "true");
+                          setShowGate(false);
+                        },
+                        className: "px-8 py-3 rounded-lg font-semibold text-white transition-all duration-200 hover:scale-105",
+                        style: {
+                          background: "linear-gradient(135deg, #6366f1, #8b5cf6)",
+                          boxShadow: "0 4px 12px rgba(99, 102, 241, 0.4)"
+                        }
+                      },
+                      "Follow"
+                    ),
+                    React.createElement(
+                      "p",
+                      {
+                        key: "skip",
+                        className: "mt-4 text-xs text-zinc-500 cursor-pointer hover:text-zinc-400 transition-colors",
+                        onClick: () => {
+                          localStorage.setItem("instagram_gate_seen", "true");
+                          setShowGate(false);
+                        }
+                      },
+                      "or close to continue"
+                    )
+                  ]
+                )
+              ),
+
+              React.createElement(
+                "div",
+                { className: "mx-auto max-w-[1040px] px-2 sm:px-4 py-6", style: { marginTop: "-25px" } },
+
+                /* Header */
+                React.createElement(
+                  "header",
+                  {
+                    className: "mb-6 mx-auto",
+                    style: {
+                      maxWidth: laneWidth + "px",
+                      position: "relative"
+                    },
+                  },
+                  [
+                    /* Auth buttons - positioned top right */
+                    React.createElement(
+                      "div",
+                      {
+                        key: "auth",
+                        className: "auth-section",
+                        style: {
+                          position: "absolute",
+                          top: "0",
+                          right: "0",
+                          display: "flex",
+                          gap: "8px",
+                          alignItems: "center",
+                          zIndex: 10
+                        }
+                      },
+                      clerk.user
+                        ? React.createElement("div", { id: "clerk-user-button" })
+                        : [
+                            React.createElement(
+                              "button",
+                              {
+                                key: "signin",
+                                onClick: () => clerk.openSignIn(),
+                                className: "auth-btn signin-btn",
+                                style: {
+                                  padding: "8px 16px",
+                                  borderRadius: "8px",
+                                  fontSize: "14px",
+                                  fontWeight: 600,
+                                  border: "1px solid rgba(99, 102, 241, 0.4)",
+                                  background: "rgba(99, 102, 241, 0.1)",
+                                  color: "#a5b4fc",
+                                  cursor: "pointer",
+                                  transition: "all 0.2s ease",
+                                }
+                              },
+                              "Sign In"
+                            ),
+                            React.createElement(
+                              "button",
+                              {
+                                key: "signup",
+                                onClick: () => clerk.openSignUp(),
+                                className: "auth-btn signup-btn",
+                                style: {
+                                  padding: "8px 16px",
+                                  borderRadius: "8px",
+                                  fontSize: "14px",
+                                  fontWeight: 600,
+                                  border: "none",
+                                  background: "linear-gradient(135deg, #6366f1, #8b5cf6)",
+                                  color: "#ffffff",
+                                  cursor: "pointer",
+                                  transition: "all 0.2s ease",
+                                }
+                              },
+                              "Sign Up"
+                            )
+                          ]
+                    ),
+
+                    /* Logo - centered */
+                    React.createElement(
+                      "div",
+                      {
+                        key: "logo",
+                        className: "flex flex-col items-center justify-center gap-4"
+                      },
+                      React.createElement(
+                        Fragment,
+                        null,
+                        React.createElement("img", {
+                          id: "kc-logo-img",
+                          alt: "KEYCLICKER Logo",
+                          className: "w-auto object-contain",
+                          style: {
+                            height: "4.15rem",
+                            transformOrigin: "center",
+                          },
+                        }),
+                        React.createElement(
+                          "div",
+                          {
+                            id: "kc-logo-fallback",
+                            style: {
+                              display: "none",
+                              fontWeight: 700,
+                              fontSize: "28px",
+                              letterSpacing: "0.5px",
+                              background: "linear-gradient(135deg, #6366f1, #8b5cf6, #a855f7)",
+                              WebkitBackgroundClip: "text",
+                              WebkitTextFillColor: "transparent",
+                              backgroundClip: "text",
+                              textShadow: "0 2px 4px rgba(99, 102, 241, 0.3)",
+                            },
+                          },
+                          [
+                            React.createElement(
+                              "h1",
+                              {
+                                key: "main",
+                                style: {
+                                  fontWeight: 800,
+                                  fontSize: "32px",
+                                  marginBottom: "-6px",
+                                  margin: 0,
+                                }
+                              },
+                              "SCALE FINDER"
+                            ),
+                            React.createElement(
+                              "div",
+                              {
+                                key: "sub",
+                                style: {
+                                  fontWeight: 500,
+                                  fontSize: "16px",
+                                  letterSpacing: "3px",
+                                  opacity: 1,
+                                  textTransform: "uppercase",
+                                  color: "#ffffff",
+                                  textAlign: "center",
+                                }
+                              },
+                              "STUDIO"
+                            )
+                          ]
+                        )
+                      )
+                    )
+                  ]
+                ),
+
+                /* Piano card */
+                React.createElement(
+                  "section",
+                  {
+                    className: "piano-card mb-3 py-3 px-3 mx-auto",
+                    style: { maxWidth: laneWidth + "px", width: "100%", transform: "translateX(-16px)" },
+                  },
+                  [
+                    React.createElement(
+                      "div",
+                      {
+                        key: "piano-wrapper",
+                        className: "flex justify-center",
+                        style: { width: pianoWidth + "px", margin: "0 auto" },
+                      },
+                      React.createElement(Piano, {
+                        selected,
+                        onKey: handleKey,
+                        onHover: handleHover,
+                        keyWidth: keyW,
+                      })
+                    ),
+                    React.createElement(
+                      "button",
+                      {
+                        key: "mute-btn",
+                        className: "mute-btn " + (muted ? "muted" : ""),
+                        title: muted ? "Unmute" : "Mute",
+                        onClick: () => setMuted((v) => !v),
+                        "aria-pressed": muted,
+                        style: {
+                          top: 16 + "px",
+                          left: Math.round(keyW * 6.70) + "px", // Anchored to B white key (7th key)
+                        },
+                      },
+                      React.createElement(MuteIcon, { muted })
+                    ),
+                    // Volume button - positioned under mute button
+                    React.createElement(
+                      "button",
+                      {
+                        key: "volume-btn",
+                        className: "mute-btn" + (showVolumeControl ? " active" : ""),
+                        title: "Volume Control",
+                        onClick: () => setShowVolumeControl((v) => !v),
+                        "data-volume-btn": "true",
+                        style: {
+                          top: 50 + "px", // Positioned under the mute button
+                          left: Math.round(keyW * 6.70) + "px", // Anchored to B white key
+                        },
+                      },
+                      React.createElement(
+                        "svg",
+                        {
+                          viewBox: "0 0 24 24",
+                          fill: "none",
+                          stroke: "currentColor",
+                          strokeWidth: "2.5",
+                          width: "20",
+                          height: "20",
+                        },
+                        // Clean ascending equalizer bars
+                        React.createElement("line", {
+                          x1: "5", y1: "12", x2: "5", y2: "15",
+                          strokeLinecap: "round"
+                        }),
+                        React.createElement("line", {
+                          x1: "8", y1: "10", x2: "8", y2: "15",
+                          strokeLinecap: "round"
+                        }),
+                        React.createElement("line", {
+                          x1: "12", y1: "7", x2: "12", y2: "15",
+                          strokeLinecap: "round"
+                        }),
+                        React.createElement("line", {
+                          x1: "16", y1: "5", x2: "16", y2: "15",
+                          strokeLinecap: "round"
+                        }),
+                        React.createElement("line", {
+                          x1: "19", y1: "3", x2: "19", y2: "15",
+                          strokeLinecap: "round"
+                        }),
+                        // Minus symbol (left) - moved down more
+                        React.createElement("line", {
+                          x1: "3", y1: "20", x2: "7", y2: "20",
+                          strokeLinecap: "round",
+                          strokeWidth: "2"
+                        }),
+                        // Plus symbol (right) - moved down more
+                        React.createElement("line", {
+                          x1: "18", y1: "18", x2: "18", y2: "22",
+                          strokeLinecap: "round",
+                          strokeWidth: "2"
+                        }),
+                        React.createElement("line", {
+                          x1: "16", y1: "20", x2: "20", y2: "20",
+                          strokeLinecap: "round",
+                          strokeWidth: "2"
+                        })
+                      )
+                    ),
+                    // Volume control - positioned next to volume button
+                    React.createElement(
+                      "div",
+                      {
+                        key: "volume-control",
+                        className: "volume-control " + (showVolumeControl ? "" : "opacity-0 pointer-events-none"),
+                        style: {
+                          top: 50 + "px", // Same level as volume button
+                          right:
+                            (isDesktop
+                              ? Math.round(50 + keyW / 20) // Positioned to the left of volume button
+                              : Math.round(36 + keyW * 0.18)) + "px",
+                          transition: "opacity 200ms ease, transform 200ms ease",
+                          transform: showVolumeControl ? "translateX(0)" : "translateX(10px)",
+                        },
+                      },
+                      [
+                        React.createElement("input", {
+                          key: "slider",
+                          type: "range",
+                          min: "0",
+                          max: "1",
+                          step: "0.01",
+                          value: masterVolume,
+                          onChange: handleVolumeChange,
+                          className: "volume-slider",
+                          "aria-label": "Master volume control",
+                          "aria-valuemin": "0",
+                          "aria-valuemax": "100",
+                          "aria-valuenow": Math.round(masterVolume * 100),
+                        }),
+                        React.createElement(
+                          "span",
+                          {
+                            key: "text",
+                            className: "volume-text",
+                          },
+                          Math.round(masterVolume * 100) + "%"
+                        ),
+                      ]
+                    ),
+                  ]
+                ),
+
+                /* Reset button */
+                React.createElement(
+                  "div",
+                  { className: "max-w-md mx-auto mt-3 mb-2" },
+                  React.createElement(
+                    "button",
+                    {
+                      className:
+                        "w-full rounded-lg bg-[#6366F1] text-white px-3 py-2 text-sm font-medium hover:bg-[#5558D9]",
+                      onClick: () => {
+                        setFromPcs([]);
+                        setChosenKey("");
+                      },
+                    },
+                    "Reset"
+                  )
+                ),
+
+                /* Key Selector */
+                React.createElement(
+                  "div",
+                  { className: "max-w-md mx-auto mb-5" },
+                  React.createElement(
+                    "select",
+                    {
+                      value: chosenKey || "",
+                      onChange: (e) => {
+                        const keyName = e.target.value;
+                        if (!keyName) {
+                          setChosenKey("");
+                          setFromPcs([]);
+                          return;
+                        }
+                        const keyObj = allKeys().find(k => k.name === keyName);
+                        if (keyObj) {
+                          setChosenKey(keyName);
+                          setFromPcs(Array.from(keyObj.pcs));
+                          if (!muted) playPc(keyObj.root, false);
+                        }
+                      },
+                      className: "w-full py-2 px-3 bg-zinc-900/60 border border-zinc-700 rounded-lg text-zinc-200 focus:border-indigo-500 focus:outline-none text-xs font-medium"
+                    },
+                    [
+                      React.createElement("option", { key: "default", value: "" }, "Select key..."),
+                      ...allKeys().map((k) =>
+                        React.createElement("option", { key: k.name, value: k.name }, getKeyDisplayName(k.name))
+                      )
+                    ]
+                  )
+                ),
+
+                /* Possible Keys + Chord Progressions Grid */
+                result.status !== "all-visible" && React.createElement(
+                  "section",
+                  {
+                    className: "possible-keys-card mb-4 mx-auto",
+                    style: {
+                      maxWidth: laneWidth + "px",
+                      width: "100%"
+                    },
+                  },
+                  React.createElement(
+                    "div",
+                    {
+                      className: "grid items-center " + (result.status === "all-visible" ? "" : "gap-4"),
+                      style: {
+                        gridTemplateColumns: (groupedKeys => {
+                          const major = result.keys.filter(k => k.type === "Major");
+                          const minor = result.keys.filter(k => k.type === "Minor");
+                          const isMobileOrTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+                          // Show 2 columns (1fr for keys, 1fr for chords) when there's one key identified - 50/50 split
+                          // On mobile, always use 1fr (single column)
+                          if (isMobileOrTouch) {
+                            return "1fr";
+                          }
+                          return (major.length === 1 || minor.length === 1) ? "1fr 1fr" : "1fr";
+                        })()
+                      }
+                    },
+                    [
+                      React.createElement(
+                        "div",
+                        {
+                          key: "keys-column",
+                          className: "flex items-center justify-center h-full",
+                          style: (groupedKeys => {
+                            const major = result.keys.filter(k => k.type === "Major");
+                            const minor = result.keys.filter(k => k.type === "Minor");
+                            const isRelativePair = (major.length === 1 && minor.length === 1);
+                            return isRelativePair ? {
+                              position: "relative"
+                            } : {};
+                          })()
+                        },
+                        React.createElement(KeysReadout, {
+                          result,
+                          onSelectKey: setChosenKey,
+                          selectedKey: chosenKey,
+                          onApplyScale: applyScale,
+                          onSave: (name, label) =>
+                            setHistory((prev) => [
+                              ...prev,
+                              { label, key: name, ts: Date.now() },
+                            ]),
+                          onReset: resetSelection,
+                        })
+                      ),
+                      React.createElement(
+                        "div",
+                        { key: "chords-column", className: "px-2" },
+                        React.createElement(ChordProgressions, {
+                          result,
+                          chosenKey,
+                          muted,
+                          playPc,
+                        })
+                      ),
+                    ]
+                  )
+                ),
+
+                /* History Log */
+                React.createElement(
+                  "div",
+                  {
+                    className: "mx-auto w-full",
+                    style: { maxWidth: laneWidth + "px" },
+                  },
+                  React.createElement(HistoryLog, {
+                    history,
+                    onDelete: (i) =>
+                      setHistory((prev) => prev.filter((_, idx) => idx !== i)),
+                    onClear: () => {
+                      if (window.confirm("Clear all saved songs?"))
+                        setHistory([]);
+                    },
+                  })
+                ),
+
+                /* Bottom Actions */
+                React.createElement(
+                  "div",
+                  {
+                    className: "bottom-actions",
+                    style: { maxWidth: laneWidth + "px", margin: "0 auto" },
+                  },
+                  [
+                    React.createElement(
+                      "button",
+                      {
+                        key: "share",
+                        onClick: handleShare,
+                        className: "bottom-btn",
+                        title: "Share Scale Finder Studio",
+                      },
+                      [
+                        React.createElement(
+                          "svg",
+                          {
+                            key: "icon",
+                            viewBox: "0 0 24 24",
+                            fill: "none",
+                            stroke: "currentColor",
+                            strokeWidth: "2",
+                          },
+                          React.createElement("path", {
+                            strokeLinecap: "round",
+                            strokeLinejoin: "round",
+                            d: "M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.367 2.684 3 3 0 00-5.367-2.684z"
+                          })
+                        ),
+                        React.createElement("span", { key: "text" }, "Share")
+                      ]
+                    ),
+                    React.createElement(
+                      "a",
+                      {
+                        key: "instagram",
+                        href: "https://instagram.com/adrmmusic_",
+                        target: "_blank",
+                        rel: "noopener noreferrer",
+                        className: "bottom-btn instagram-btn",
+                        title: "Follow @adrmmusic_ on Instagram",
+                      },
+                      [
+                        React.createElement(
+                          "svg",
+                          {
+                            key: "icon",
+                            viewBox: "0 0 24 24",
+                            fill: "currentColor",
+                          },
+                          React.createElement("path", {
+                            d: "M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"
+                          })
+                        ),
+                        React.createElement("span", { key: "text" }, "Follow")
+                      ]
+                    )
+                  ]
+                ),
+                React.createElement(
+                  "div",
+                  {
+                    key: "version",
+                    style: {
+                      textAlign: "center",
+                      marginTop: "12px",
+                      fontSize: "10px",
+                      color: "#6b7280",
+                      fontWeight: 400
+                    }
+                  },
+                  "v1.0"
+                )
+              )
+            );
+          }
+
+          ReactDOM.createRoot(document.getElementById("root")).render(
+            React.createElement(App)
+          );
+          document.getElementById("booting").style.display = "none";
+        } catch (err) {
+          console.error(err);
+          showBootError(err);
+        }
+      })();
+    </script>
+  </body>
+</html>
