@@ -607,6 +607,140 @@
         box-shadow: 0 6px 20px rgba(99, 102, 241, 0.5) !important;
       }
 
+      /* Freemium banner styles */
+      .signup-banner {
+        position: fixed;
+        top: 0; /* Position at very top, above header */
+        left: 0;
+        right: 0;
+        z-index: 100; /* Above header and content */
+        background: linear-gradient(135deg, #6366f1, #8b5cf6);
+        padding: 12px 16px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 16px;
+        box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4);
+        animation: slideDown 0.3s ease-out;
+      }
+
+      /* Push body content down when banner is visible */
+      body:has(.signup-banner) #root {
+        padding-top: 60px;
+      }
+
+      @keyframes slideDown {
+        from { transform: translateY(-100%); }
+        to { transform: translateY(0); }
+      }
+
+      .signup-banner-text {
+        color: white;
+        font-weight: 600;
+        font-size: 14px;
+      }
+
+      /* Freemium modal styles */
+      .signup-modal-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.7);
+        backdrop-filter: blur(8px);
+        z-index: 1000;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+        animation: fadeIn 0.3s ease-out;
+      }
+
+      @keyframes fadeIn {
+        from { opacity: 0; }
+        to { opacity: 1; }
+      }
+
+      .signup-modal {
+        background: linear-gradient(180deg, rgba(20, 22, 32, 0.95), rgba(14, 16, 26, 0.95));
+        border: 1px solid rgba(99, 102, 241, 0.3);
+        border-radius: 16px;
+        padding: 40px 32px;
+        max-width: 450px;
+        width: 100%;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
+        text-align: center;
+        animation: scaleIn 0.3s ease-out;
+      }
+
+      @keyframes scaleIn {
+        from { transform: scale(0.9); opacity: 0; }
+        to { transform: scale(1); opacity: 1; }
+      }
+
+      .signup-modal h2 {
+        font-size: 28px;
+        font-weight: 800;
+        background: linear-gradient(135deg, #6366f1, #8b5cf6, #a855f7);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        margin: 0 0 16px 0;
+      }
+
+      .signup-modal p {
+        color: #d4d4d8;
+        margin: 0 0 24px 0;
+        font-size: 16px;
+      }
+
+      .modal-btn-primary {
+        width: 100%;
+        padding: 14px 24px;
+        border-radius: 8px;
+        border: none;
+        background: linear-gradient(135deg, #6366f1, #8b5cf6);
+        color: white;
+        font-weight: 600;
+        font-size: 16px;
+        cursor: pointer;
+        transition: all 0.2s;
+        margin-bottom: 12px;
+      }
+
+      .modal-btn-primary:hover {
+        box-shadow: 0 6px 20px rgba(99, 102, 241, 0.5);
+        transform: translateY(-2px);
+      }
+
+      .modal-btn-secondary {
+        background: none;
+        border: none;
+        color: #a5b4fc;
+        font-size: 14px;
+        cursor: pointer;
+        text-decoration: underline;
+        margin-bottom: 16px;
+      }
+
+      .modal-btn-secondary:hover {
+        color: #c7d2fe;
+      }
+
+      .modal-dismiss-link {
+        color: #a5b4fc;
+        font-size: 14px;
+        cursor: pointer;
+        margin-top: 16px;
+        text-decoration: underline;
+        font-weight: 500;
+      }
+
+      .modal-dismiss-link:hover {
+        color: #c7d2fe;
+      }
+
       /* Mobile responsive fixes for iPhone SE and small screens */
       @media (max-width: 768px) {
         /* Move auth buttons below logo on mobile */
@@ -1723,12 +1857,85 @@
             );
           }
 
+          /* ---------- Cookie Helpers ---------- */
+          function setCookie(name, value, days) {
+            const expires = new Date();
+            expires.setTime(expires.getTime() + days * 24 * 60 * 60 * 1000);
+            document.cookie = `${name}=${value};expires=${expires.toUTCString()};path=/`;
+            console.log(`Cookie set: ${name}=${value} (expires in ${days} days)`);
+          }
+
+          function getCookie(name) {
+            const nameEQ = name + "=";
+            const ca = document.cookie.split(';');
+            for (let i = 0; i < ca.length; i++) {
+              let c = ca[i];
+              while (c.charAt(0) === ' ') c = c.substring(1, c.length);
+              if (c.indexOf(nameEQ) === 0) return c.substring(nameEQ.length, c.length);
+            }
+            return null;
+          }
+
+          function checkLimitCookie() {
+            const cookie = getCookie('sf_limit_reached');
+            console.log('Checking limit cookie:', cookie);
+            return cookie === 'true';
+          }
+
           /* ---------- App ---------- */
           function App() {
             const { selected, toggle, reset, setFromPcs } = usePitchSelection();
             const [masterVolume, setMasterVolume] = useState(0.7);
             const { playPc, setMasterVolume: updateAudioVolume, playScale } = usePianoSamples(masterVolume);
             const result = useMemo(() => getPossibleKeys(selected), [selected]);
+
+            // Usage tracking for freemium flow (simplified)
+            const [usageStats, setUsageStats] = useState(() => {
+              try {
+                const raw = localStorage.getItem("usage_stats");
+                if (raw) {
+                  const parsed = JSON.parse(raw);
+                  console.log('Restored usage stats from localStorage:', parsed);
+                  return parsed;
+                }
+              } catch (e) {
+                console.warn('Failed to parse localStorage usage_stats:', e);
+              }
+
+              // Default state if no localStorage data
+              return {
+                pianoClicks: 0,
+                scaleChipClicks: 0,
+                dropdownSelections: 0,
+                startTime: Date.now(),
+                modalShown: false
+              };
+            });
+
+            const [showBanner, setShowBanner] = useState(false);
+            const [showModal, setShowModal] = useState(() => {
+              // Check on page load: if cookie OR localStorage says limit reached, show modal immediately
+              if (!clerk.user) {
+                const hasCookie = checkLimitCookie();
+                const hasLocalStorageLimit = usageStats.modalShown === true;
+
+                if (hasCookie || hasLocalStorageLimit) {
+                  console.log('FORCING MODAL on page load - Cookie:', hasCookie, 'localStorage:', hasLocalStorageLimit);
+                  return true;
+                }
+              }
+              return false;
+            });
+
+            // Save usage stats to localStorage on every update
+            useEffect(() => {
+              try {
+                localStorage.setItem("usage_stats", JSON.stringify(usageStats));
+                console.log('Saved usage stats to localStorage:', usageStats);
+              } catch (e) {
+                console.warn('Failed to save to localStorage:', e);
+              }
+            }, [usageStats]);
 
             const [history, setHistory] = useState(() => {
               try {
@@ -1847,6 +2054,38 @@
               }
             };
             
+            // Check for banner/modal triggers (only if not logged in) - SIMPLIFIED
+            useEffect(() => {
+              if (clerk.user) return; // Skip if user is logged in
+
+              console.log('=== FREEMIUM CHECK ===', {
+                showBanner,
+                modalShown: usageStats.modalShown,
+                showModal,
+                pianoClicks: usageStats.pianoClicks,
+                scaleChipClicks: usageStats.scaleChipClicks,
+                dropdownSelections: usageStats.dropdownSelections
+              });
+
+              // Show banner after: 10 piano clicks OR 2 scale chip clicks OR 2 dropdown selections
+              if (!showBanner) {
+                if (usageStats.pianoClicks >= 10 || usageStats.scaleChipClicks >= 2 || usageStats.dropdownSelections >= 2) {
+                  console.log('>>> SHOWING BANNER');
+                  setShowBanner(true);
+                }
+              }
+
+              // Show modal after: 25 piano clicks OR 10 scale chip clicks OR 5 dropdown selections
+              if (!usageStats.modalShown && !showModal) {
+                if (usageStats.pianoClicks >= 25 || usageStats.scaleChipClicks >= 10 || usageStats.dropdownSelections >= 5) {
+                  console.log('TRIGGERING MODAL!');
+                  setShowModal(true);
+                  setUsageStats(prev => ({ ...prev, modalShown: true }));
+                  setCookie('sf_limit_reached', 'true', 7); // 7-day cookie
+                }
+              }
+            }, [usageStats, clerk.user, showBanner, showModal]);
+
             // Auto-select key when narrowed down to one choice via piano
             useEffect(() => {
               const majorKeys = result.keys.filter(k => k.type === "Major");
@@ -1903,6 +2142,11 @@
               const userButtonDiv = document.getElementById("clerk-user-button");
               if (clerk.user && userButtonDiv) {
                 clerk.mountUserButton(userButtonDiv);
+
+                // Clear limit cookie and localStorage when user signs in
+                setCookie('sf_limit_reached', 'false', -1); // Delete cookie
+                localStorage.removeItem('usage_stats');
+                console.log('User signed in - cleared limits');
               }
             }, [clerk.user]);
 
@@ -1982,10 +2226,19 @@
             const handleKey = (pc) => {
               // Hide volume control when clicking piano keys
               setShowVolumeControl(false);
-              
+
+              // Track piano click for freemium flow
+              if (!clerk.user) {
+                setUsageStats(prev => {
+                  const newCount = prev.pianoClicks + 1;
+                  console.log('Piano click:', newCount, 'Banner dismissed:', prev.bannerDismissed, 'Threshold:', prev.bannerPianoThreshold);
+                  return { ...prev, pianoClicks: newCount };
+                });
+              }
+
               const selecting = !selected.has(pc);
               const keyElements = document.querySelectorAll(`[data-pitch="${pc}"]`);
-              
+
               if (selecting) {
                 // Add darker outline animation for selecting
                 keyElements.forEach(el => {
@@ -2016,13 +2269,18 @@
                 setFromPcs(Array.from(pcs));
                 setChosenKey(k.name);
                 if (!muted) playPc(k.root, false);
+
+                // Track scale chip click for freemium flow
+                if (!clerk.user) {
+                  setUsageStats(prev => ({ ...prev, scaleChipClicks: prev.scaleChipClicks + 1 }));
+                }
               }
             };
 
             const resetSelection = () => {
               // Hide volume control when clicking reset button
               setShowVolumeControl(false);
-              
+
               setFromPcs([]);
               setChosenKey("");
             };
@@ -2031,6 +2289,63 @@
             return React.createElement(
               "div",
               { className: "min-h-screen w-full" },
+
+              /* Sign-up Banner (informational only, no dismiss) */
+              showBanner && !clerk.user && React.createElement(
+                "div",
+                { className: "signup-banner" },
+                React.createElement(
+                  "span",
+                  { className: "signup-banner-text" },
+                  "Sign up for free to keep using Scale Finder Studio!"
+                ),
+                React.createElement(
+                  "button",
+                  {
+                    onClick: () => clerk.openSignUp(),
+                    className: "auth-btn signup-btn",
+                    style: {
+                      padding: "6px 16px",
+                      borderRadius: "6px",
+                      fontSize: "13px",
+                      fontWeight: 600,
+                      border: "none",
+                      background: "rgba(255, 255, 255, 0.9)",
+                      color: "#6366f1",
+                      cursor: "pointer",
+                    }
+                  },
+                  "Sign Up"
+                )
+              ),
+
+              /* Sign-up Modal */
+              showModal && !clerk.user && React.createElement(
+                "div",
+                { className: "signup-modal-overlay" },
+                React.createElement(
+                  "div",
+                  { className: "signup-modal" },
+                  React.createElement("h2", null, "Ready for More?"),
+                  React.createElement("p", null, "Sign up to continue using for free"),
+                  React.createElement(
+                    "button",
+                    {
+                      onClick: () => clerk.openSignUp(),
+                      className: "modal-btn-primary"
+                    },
+                    "Create Account"
+                  ),
+                  React.createElement(
+                    "button",
+                    {
+                      onClick: () => clerk.openSignIn(),
+                      className: "modal-btn-secondary"
+                    },
+                    "Already have an account? Sign In"
+                  )
+                )
+              ),
 
               /* Instagram Follow Gate Overlay */
               showGate && React.createElement(
@@ -2123,68 +2438,6 @@
                     },
                   },
                   [
-                    /* Auth buttons - positioned top right */
-                    React.createElement(
-                      "div",
-                      {
-                        key: "auth",
-                        className: "auth-section",
-                        style: {
-                          position: "absolute",
-                          top: "0",
-                          right: "0",
-                          display: "flex",
-                          gap: "8px",
-                          alignItems: "center",
-                          zIndex: 10
-                        }
-                      },
-                      clerk.user
-                        ? React.createElement("div", { id: "clerk-user-button" })
-                        : [
-                            React.createElement(
-                              "button",
-                              {
-                                key: "signin",
-                                onClick: () => clerk.openSignIn(),
-                                className: "auth-btn signin-btn",
-                                style: {
-                                  padding: "8px 16px",
-                                  borderRadius: "8px",
-                                  fontSize: "14px",
-                                  fontWeight: 600,
-                                  border: "1px solid rgba(99, 102, 241, 0.4)",
-                                  background: "rgba(99, 102, 241, 0.1)",
-                                  color: "#a5b4fc",
-                                  cursor: "pointer",
-                                  transition: "all 0.2s ease",
-                                }
-                              },
-                              "Sign In"
-                            ),
-                            React.createElement(
-                              "button",
-                              {
-                                key: "signup",
-                                onClick: () => clerk.openSignUp(),
-                                className: "auth-btn signup-btn",
-                                style: {
-                                  padding: "8px 16px",
-                                  borderRadius: "8px",
-                                  fontSize: "14px",
-                                  fontWeight: 600,
-                                  border: "none",
-                                  background: "linear-gradient(135deg, #6366f1, #8b5cf6)",
-                                  color: "#ffffff",
-                                  cursor: "pointer",
-                                  transition: "all 0.2s ease",
-                                }
-                              },
-                              "Sign Up"
-                            )
-                          ]
-                    ),
-
                     /* Logo - centered */
                     React.createElement(
                       "div",
@@ -2253,6 +2506,68 @@
                           ]
                         )
                       )
+                    ),
+
+                    /* Auth buttons - positioned top right on desktop, below logo on mobile */
+                    React.createElement(
+                      "div",
+                      {
+                        key: "auth",
+                        className: "auth-section",
+                        style: {
+                          position: "absolute",
+                          top: "0",
+                          right: "0",
+                          display: "flex",
+                          gap: "8px",
+                          alignItems: "center",
+                          zIndex: 10
+                        }
+                      },
+                      clerk.user
+                        ? React.createElement("div", { id: "clerk-user-button" })
+                        : [
+                            React.createElement(
+                              "button",
+                              {
+                                key: "signin",
+                                onClick: () => clerk.openSignIn(),
+                                className: "auth-btn signin-btn",
+                                style: {
+                                  padding: "8px 16px",
+                                  borderRadius: "8px",
+                                  fontSize: "14px",
+                                  fontWeight: 600,
+                                  border: "1px solid rgba(99, 102, 241, 0.4)",
+                                  background: "rgba(99, 102, 241, 0.1)",
+                                  color: "#a5b4fc",
+                                  cursor: "pointer",
+                                  transition: "all 0.2s ease",
+                                }
+                              },
+                              "Sign In"
+                            ),
+                            React.createElement(
+                              "button",
+                              {
+                                key: "signup",
+                                onClick: () => clerk.openSignUp(),
+                                className: "auth-btn signup-btn",
+                                style: {
+                                  padding: "8px 16px",
+                                  borderRadius: "8px",
+                                  fontSize: "14px",
+                                  fontWeight: 600,
+                                  border: "none",
+                                  background: "linear-gradient(135deg, #6366f1, #8b5cf6)",
+                                  color: "#ffffff",
+                                  cursor: "pointer",
+                                  transition: "all 0.2s ease",
+                                }
+                              },
+                              "Sign Up"
+                            )
+                          ]
                     )
                   ]
                 ),
@@ -2435,11 +2750,17 @@
                           setFromPcs([]);
                           return;
                         }
+
                         const keyObj = allKeys().find(k => k.name === keyName);
                         if (keyObj) {
                           setChosenKey(keyName);
                           setFromPcs(Array.from(keyObj.pcs));
                           if (!muted) playPc(keyObj.root, false);
+
+                          // Track dropdown selection for freemium flow
+                          if (!clerk.user) {
+                            setUsageStats(prev => ({ ...prev, dropdownSelections: prev.dropdownSelections + 1 }));
+                          }
                         }
                       },
                       className: "w-full py-2 px-3 bg-zinc-900/60 border border-zinc-700 rounded-lg text-zinc-200 focus:border-indigo-500 focus:outline-none text-xs font-medium"
