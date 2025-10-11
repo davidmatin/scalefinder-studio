@@ -1828,6 +1828,12 @@
                                   },
                                   getKeyDisplayName(k.name)
                                 ),
+                                isRelativePairOnly &&
+                                  React.createElement(
+                                    "div",
+                                    { key: "subtitle", className: "text-[10px] opacity-0 font-normal text-center", style: { visibility: "hidden" } },
+                                    "placeholder"
+                                  )
                               ]
                             ),
                             isRelativePairOnly &&
@@ -1890,7 +1896,7 @@
                           [
                             React.createElement(
                               "div",
-                              { key: "button-wrapper", className: "flex flex-col items-center gap-1", style: isRelativePairOnly ? { marginTop: "0.5rem" } : {} },
+                              { key: "button-wrapper", className: "flex flex-col items-center gap-1" },
                               [
                                 React.createElement(
                                   "button",
