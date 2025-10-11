@@ -1192,7 +1192,7 @@
                 // This is more reliable than synthetic audio for iOS
                 silentAudioRef.current = new Audio('assets/samples/C.mp3');
                 silentAudioRef.current.loop = true;
-                silentAudioRef.current.volume = 0.001; // Nearly inaudible
+                silentAudioRef.current.volume = 0; // Completely silent
                 silentAudioRef.current.setAttribute('playsinline', '');
                 silentAudioRef.current.setAttribute('webkit-playsinline', '');
                 silentAudioRef.current.preload = 'auto';
@@ -1439,15 +1439,22 @@
               };
             }, []);
 
-            // Control silent audio element volume based on mute state
+            // Control silent audio element based on mute state
+            // Keep volume at 0 always, but pause/play to save resources
             useEffect(() => {
               if (silentAudioRef.current) {
+                silentAudioRef.current.volume = 0; // Always silent
                 if (muted) {
-                  silentAudioRef.current.volume = 0;
-                  console.log('[iOS Bypass] Silent audio muted');
+                  silentAudioRef.current.pause();
+                  console.log('[iOS Bypass] Silent audio paused');
                 } else {
-                  silentAudioRef.current.volume = 0.001;
-                  console.log('[iOS Bypass] Silent audio unmuted');
+                  // Resume playing if it was paused
+                  if (silentAudioRef.current.paused) {
+                    silentAudioRef.current.play().catch(err => {
+                      console.warn('[iOS Bypass] Failed to resume silent audio:', err);
+                    });
+                    console.log('[iOS Bypass] Silent audio resumed');
+                  }
                 }
               }
             }, [muted]);
