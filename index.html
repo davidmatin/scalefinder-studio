@@ -491,7 +491,12 @@
       .scale-group.no-separator::after {
         display: none;
       }
+      .scale-group.no-separator {
+        padding-bottom: 0;
+        margin-bottom: 0;
+      }
       .scale-group.with-x-space {
+        margin-left: 0.5rem;
       }
 
       @media (min-width: 769px) {
@@ -1766,7 +1771,7 @@
             const showTitle = totalKeys > 1 && !isRelativePairOnly;
 
             return React.createElement("div", {
-              className: "fade-in" + (isRelativePairOnly ? " flex flex-row justify-center items-center h-full gap-2 w-full" : ""),
+              className: "fade-in" + (isRelativePairOnly ? " flex flex-row justify-center items-center gap-2 w-full" : ""),
               style: isRelativePairOnly ? { paddingTop: "1rem" } : {}
             }, [
               showTitle && React.createElement(
