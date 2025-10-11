@@ -1772,7 +1772,7 @@
 
             return React.createElement("div", {
               className: "fade-in" + (isRelativePairOnly ? " flex flex-row justify-center items-center gap-2 w-full" : ""),
-              style: isRelativePairOnly ? { paddingTop: "0.25rem", paddingBottom: "0.25rem", paddingLeft: "1rem" } : {}
+              style: isRelativePairOnly ? { paddingTop: "0", paddingBottom: "0", paddingLeft: "1.5rem" } : {}
             }, [
               showTitle && React.createElement(
                 "p",
@@ -1831,8 +1831,8 @@
                                 isRelativePairOnly &&
                                   React.createElement(
                                     "div",
-                                    { key: "subtitle", className: "text-[10px] opacity-0 font-normal text-center" },
-                                    "placeholder"
+                                    { key: "subtitle", className: "text-[10px] opacity-60 font-normal text-center" },
+                                    "major"
                                   )
                               ]
                             ),
