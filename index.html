@@ -714,6 +714,24 @@
         transform: translateY(-2px);
       }
 
+      .modal-btn-outlined {
+        width: 100%;
+        padding: 14px 24px;
+        border-radius: 8px;
+        border: 2px solid #6366f1;
+        background: transparent;
+        color: #a5b4fc;
+        font-weight: 600;
+        font-size: 16px;
+        cursor: pointer;
+        transition: all 0.2s;
+      }
+
+      .modal-btn-outlined:hover {
+        background: rgba(99, 102, 241, 0.1);
+        border-color: #8b5cf6;
+      }
+
       .modal-btn-secondary {
         background: none;
         border: none;
@@ -880,12 +898,26 @@
             10: { sharp: "A#", flat: "B♭" }   // A#/Bb
           };
 
-          // Get display name - uses flat symbols for display
+          // Get display name - converts enharmonic keys to proper spelling
           function getKeyDisplayName(keyName, showBoth = false) {
             // Extract root note and type
             const parts = keyName.split(' ');
             const rootName = parts[0];
             const type = parts[1]; // "Major" or "Minor"
+
+            // Convert enharmonic equivalents to standard key names
+            // D# Major → Eb Major, G# Major → Ab Major
+            // A# Minor → Bb Minor, D# Minor → Eb Minor
+            const enharmonicConversions = {
+              "D# Major": "E♭ Major",
+              "G# Major": "A♭ Major",
+              "A# Minor": "B♭ Minor",
+              "D# Minor": "E♭ Minor"
+            };
+
+            if (enharmonicConversions[keyName]) {
+              return enharmonicConversions[keyName];
+            }
 
             // Find pitch class number for this root
             const pc = PITCHES.findIndex(p => p.name === rootName);
@@ -896,6 +928,53 @@
             const displayRoot = PITCHES[pc].display;
 
             return `${displayRoot} ${type}`;
+          }
+
+          // Determine if a key uses sharps or flats based on Circle of Fifths
+          function usesSharpAccidentals(keyName) {
+            // Sharp keys (C → G → D → A → E → B → F# → C#)
+            const sharpMajorKeys = ["C Major", "G Major", "D Major", "A Major", "E Major", "B Major", "F# Major", "C# Major"];
+            // Their relative minors (A → E → B → F# → C# → G# → D# → A#)
+            const sharpMinorKeys = ["A Minor", "E Minor", "B Minor", "F# Minor", "C# Minor", "G# Minor", "D# Minor", "A# Minor"];
+
+            return sharpMajorKeys.includes(keyName) || sharpMinorKeys.includes(keyName);
+          }
+
+          function usesFlatAccidentals(keyName) {
+            // Flat keys (F → Bb → Eb → Ab)
+            // Include both sharp notation (internal) and flat symbols (display)
+            const flatMajorKeys = [
+              "F Major",
+              "Bb Major", "B♭ Major",
+              "Eb Major", "E♭ Major",
+              "Ab Major", "A♭ Major"
+            ];
+            // Their relative minors (D → G → C → F)
+            const flatMinorKeys = ["D Minor", "G Minor", "C Minor", "F Minor"];
+
+            return flatMajorKeys.includes(keyName) || flatMinorKeys.includes(keyName);
+          }
+
+          // Convert pitch class to note name with correct accidental for the key
+          function getNoteNameForKey(pitchClass, keyName) {
+            const naturalNotes = ["C", "C", "D", "D", "E", "F", "F", "G", "G", "A", "A", "B"];
+
+            // Natural notes (no accidental needed)
+            if ([0, 2, 4, 5, 7, 9, 11].includes(pitchClass)) {
+              return PITCHES[pitchClass].name;
+            }
+
+            // Accidental notes - choose sharp or flat based on key
+            if (usesSharpAccidentals(keyName)) {
+              // Use sharps: C#, D#, F#, G#, A#
+              return ENHARMONICS[pitchClass].sharp;
+            } else if (usesFlatAccidentals(keyName)) {
+              // Use flats: Db, Eb, Gb, Ab, Bb
+              return ENHARMONICS[pitchClass].flat;
+            } else {
+              // Default (C Major/A Minor) - use PITCHES display
+              return PITCHES[pitchClass].display;
+            }
           }
 
           // Chord quality patterns for scale degrees
@@ -921,34 +1000,59 @@
 
           // Calculate chord progressions for a given key
           function getChordProgressions(keyName) {
-            const parts = keyName.split(' ');
+            // Convert enharmonic key names first (D# Major → Eb Major, etc.)
+            const enharmonicMap = {
+              "D# Major": "Eb Major",
+              "G# Major": "Ab Major",
+              "A# Minor": "Bb Minor",
+              "D# Minor": "Eb Minor"
+            };
+
+            // Use converted key name if it's an enharmonic equivalent
+            const normalizedKeyName = enharmonicMap[keyName] || keyName;
+
+            const parts = normalizedKeyName.split(' ');
             const rootName = parts[0];
             const type = parts[1];
-            
-            // Find root pitch class
-            const rootPc = PITCHES.findIndex(p => p.name === rootName);
+
+            // Map flat symbols back to internal PITCHES names
+            // Also handle keys that might come in as "Bb" without the symbol
+            const rootNameMap = {
+              "E♭": "D#", "Eb": "D#",
+              "A♭": "G#", "Ab": "G#",
+              "B♭": "A#", "Bb": "A#",
+              "D♭": "C#", "Db": "C#",
+              "G♭": "F#", "Gb": "F#"
+            };
+
+            const internalRootName = rootNameMap[rootName] || rootName;
+
+            // Find root pitch class using internal name
+            const rootPc = PITCHES.findIndex(p => p.name === internalRootName);
             if (rootPc === -1) return null;
-            
+
             // Get scale intervals
             const intervals = SCALE_INTERVALS[type];
             if (!intervals) return null;
-            
-            // Calculate chord roots for each degree
+
+            // Calculate chord roots for each degree with correct accidentals
+            // Use the NORMALIZED key name (Eb Major, not D# Major)
             const chordRoots = intervals.map(interval => {
               const pc = (rootPc + interval) % 12;
-              return PITCHES[pc].name;
+              // Use getNoteNameForKey to get sharp or flat based on key signature
+              return getNoteNameForKey(pc, normalizedKeyName);
             });
-            
+
             // Get chord pattern based on major/minor
             const pattern = type === 'Major' ? MAJOR_CHORD_PATTERN : MINOR_CHORD_PATTERN;
-            
+
             // Build chord list
             const chords = chordRoots.map((root, index) => {
               const chord = pattern[index];
-              const suffix = chord.quality === 'maj' ? '' : 
-                           chord.quality === 'min' ? 'm' : 
+              const suffix = chord.quality === 'maj' ? '' :
+                           chord.quality === 'min' ? 'm' :
                            chord.quality === 'dim' ? '°' : '';
-              
+
               return {
                 roman: chord.roman,
                 name: `${root}${suffix}`,
@@ -956,7 +1060,7 @@
                 quality: chord.quality
               };
             });
-            
+
             return {
               key: keyName,
               type: type,
@@ -1032,6 +1136,8 @@
             const currentRef = useRef(null);
             const masterGainRef = useRef(null);
             const reverbRef = useRef(null);
+            const iosUnlockedRef = useRef(false);
+
             const ensure = () => {
               if (!ctxRef.current) {
                 ctxRef.current = new (window.AudioContext || window.webkitAudioContext)();
@@ -1070,6 +1176,33 @@
                 masterGainRef.current.connect(ctxRef.current.destination);
               }
               return ctxRef.current;
+            };
+
+            // iOS Silent Switch Bypass: Unlock audio on first interaction
+            const unlockIOSAudio = () => {
+              if (iosUnlockedRef.current) return;
+
+              const ctx = ensure();
+
+              // Create silent audio element (tiny silent WAV file as data URI)
+              const silentAudio = new Audio('data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA');
+              silentAudio.loop = true;
+              silentAudio.volume = 0.01; // Nearly silent but not muted
+
+              // Play silent audio to switch iOS to "media" category
+              const playPromise = silentAudio.play();
+              if (playPromise !== undefined) {
+                playPromise.then(() => {
+                  // Resume AudioContext
+                  if (ctx.state === 'suspended') {
+                    ctx.resume();
+                  }
+                  iosUnlockedRef.current = true;
+                  console.log('iOS audio unlocked - Web Audio will now bypass silent switch');
+                }).catch(err => {
+                  console.warn('iOS audio unlock failed:', err);
+                });
+              }
             };
 
             async function fetchDecode(url) {
@@ -1153,7 +1286,10 @@
             
             async function playScale(pitchClasses, ascending = true, bpm = 120) {
               if (!pitchClasses || pitchClasses.length === 0) return;
-              
+
+              // Unlock iOS audio on first user interaction
+              unlockIOSAudio();
+
               const ctx = ensure();
               if (ctx.state === "suspended") await ctx.resume();
               
@@ -1208,6 +1344,10 @@
             }
             async function playPc(pc, muted) {
               if (muted) return;
+
+              // Unlock iOS audio on first user interaction
+              unlockIOSAudio();
+
               const ctx = ensure();
               if (ctx.state === "suspended") await ctx.resume();
               const label = fileLabel(PITCHES[pc].name);
@@ -2129,7 +2269,9 @@
             useEffect(() => {
               const userButtonDiv = document.getElementById("clerk-user-button");
               if (clerk.user && userButtonDiv) {
-                clerk.mountUserButton(userButtonDiv);
+                clerk.mountUserButton(userButtonDiv, {
+                  afterSignOutUrl: window.location.origin
+                });
 
                 // Clear limit cookie and localStorage when user signs in
                 setCookie('sf_limit_reached', 'false', -1); // Delete cookie
@@ -2314,7 +2456,7 @@
                 React.createElement(
                   "div",
                   { className: "signup-modal" },
-                  React.createElement("h2", null, "Ready for More?"),
+                  React.createElement("h2", null, "Let's keep working!"),
                   React.createElement("p", null, "Sign up to continue using for free"),
                   React.createElement(
                     "button",
@@ -2328,9 +2470,9 @@
                     "button",
                     {
                       onClick: () => clerk.openSignIn(),
-                      className: "modal-btn-secondary"
+                      className: "modal-btn-outlined"
                     },
-                    "Already have an account? Sign In"
+                    "Log In"
                   )
                 )
               ),
@@ -2362,11 +2504,13 @@
                         null,
                         React.createElement("img", {
                           id: "kc-logo-img",
-                          alt: "KEYCLICKER Logo",
+                          src: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'/%3E",
+                          alt: "Scale Finder Studio Logo",
                           className: "w-auto object-contain",
                           style: {
                             height: "4.15rem",
                             transformOrigin: "center",
+                            display: "none"
                           },
                         }),
                         React.createElement(
