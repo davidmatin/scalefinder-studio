@@ -1361,10 +1361,11 @@
               }
             }
             async function playPc(pc, muted) {
-              if (muted) return;
-
-              // Unlock iOS audio on first user interaction
+              // Unlock iOS audio on first user interaction (must happen before mute check)
               unlockIOSAudio();
+
+              // If muted, return early after unlocking iOS audio
+              if (muted) return;
 
               const ctx = ensure();
               if (ctx.state === "suspended") await ctx.resume();
@@ -2171,9 +2172,7 @@
 
               // Set new timeout for 100ms delay
               const timeoutId = setTimeout(() => {
-                if (!muted) {
-                  playPc(pc, false);
-                }
+                playPc(pc, muted);
                 setHoverTimeout(null);
               }, 100);
 
@@ -2440,7 +2439,7 @@
               }
               
               toggle(pc);
-              if (selecting && !muted) playPc(pc, false);
+              if (selecting) playPc(pc, muted);
             };
 
             const applyScale = (k) => {
@@ -2450,11 +2449,11 @@
               const pcs = k.pcs;
               // Don't toggle off if already selected - just keep it selected and play sound
               if (setEquals(selected, pcs)) {
-                if (!muted) playPc(k.root, false);
+                playPc(k.root, muted);
               } else {
                 setFromPcs(Array.from(pcs));
                 setChosenKey(k.name);
-                if (!muted) playPc(k.root, false);
+                playPc(k.root, muted);
 
                 // Track scale chip click for freemium flow
                 if (!clerk.user) {
@@ -2867,7 +2866,7 @@
                         if (keyObj) {
                           setChosenKey(keyName);
                           setFromPcs(Array.from(keyObj.pcs));
-                          if (!muted) playPc(keyObj.root, false);
+                          playPc(keyObj.root, muted);
 
                           // Track dropdown selection for freemium flow
                           if (!clerk.user) {
