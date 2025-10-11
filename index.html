@@ -1183,29 +1183,37 @@
             const unlockIOSAudio = () => {
               if (iosUnlockedRef.current) return;
 
+              console.log('[iOS Bypass] Starting unlock attempt...');
               const ctx = ensure();
 
-              // Create or reuse silent audio element
+              // Create or reuse HTML5 audio element using one of our piano samples
               if (!silentAudioRef.current) {
-                // Create silent audio element (tiny silent WAV file as data URI)
-                silentAudioRef.current = new Audio('data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA');
+                // Use actual piano sample (C.mp3) at very low volume
+                // This is more reliable than synthetic audio for iOS
+                silentAudioRef.current = new Audio('assets/samples/C.mp3');
                 silentAudioRef.current.loop = true;
-                silentAudioRef.current.volume = 0.1; // Low volume to ensure iOS categorizes as "media"
+                silentAudioRef.current.volume = 0.001; // Nearly inaudible
+                silentAudioRef.current.setAttribute('playsinline', '');
+                silentAudioRef.current.setAttribute('webkit-playsinline', '');
+                silentAudioRef.current.preload = 'auto';
+                console.log('[iOS Bypass] Created audio element with C.mp3 sample');
               }
 
-              // Play silent audio to switch iOS to "media" category
+              // Play the looping audio to force iOS into "media" playback mode
               const playPromise = silentAudioRef.current.play();
               if (playPromise !== undefined) {
                 playPromise.then(() => {
-                  // Resume AudioContext
+                  console.log('[iOS Bypass] Audio element playing successfully');
+                  // Resume AudioContext (critical for Web Audio API)
                   if (ctx.state === 'suspended') {
-                    ctx.resume();
+                    ctx.resume().then(() => {
+                      console.log('[iOS Bypass] AudioContext resumed, state:', ctx.state);
+                    });
                   }
                   iosUnlockedRef.current = true;
-                  console.log('iOS audio unlocked - Web Audio will now bypass silent switch');
-                  console.log('Silent audio element playing in background at volume:', silentAudioRef.current.volume);
+                  console.log('[iOS Bypass] ✅ COMPLETE - iOS audio unlocked, silent switch bypassed');
                 }).catch(err => {
-                  console.warn('iOS audio unlock failed:', err);
+                  console.error('[iOS Bypass] ❌ FAILED:', err);
                 });
               }
             };
