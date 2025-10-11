@@ -1409,38 +1409,29 @@
 
             // HTML5 Audio playback (iOS compatibility mode - bypasses silent switch)
             // No reverb or smooth fades, but works with iOS silent switch ON
+            // Uses cloneNode() for instant playback and natural note overlap
             async function playPcHTML5Audio(pc, muted) {
               if (muted) return;
 
               const label = fileLabel(PITCHES[pc].name);
               const audioPath = `assets/samples/${label}.mp3`;
 
-              // Create or reuse HTML5 Audio element for this note
+              // Ensure the base audio element exists in the pool
               if (!html5AudioPool.current[label]) {
                 html5AudioPool.current[label] = new Audio(audioPath);
                 html5AudioPool.current[label].preload = 'auto';
+                console.log('[iOS Mode] Created base audio element:', label);
               }
 
-              const audio = html5AudioPool.current[label];
-
-              // Stop current audio if playing
-              if (currentRef.current) {
-                try {
-                  currentRef.current.pause();
-                  currentRef.current.currentTime = 0;
-                } catch {}
-              }
-
-              // Set volume and play
+              // Clone the pre-loaded element for instant playback (no loading delay)
+              const audio = html5AudioPool.current[label].cloneNode();
               audio.volume = masterVolume;
-              audio.currentTime = 0; // Reset to start
 
               try {
                 await audio.play();
-                currentRef.current = audio;
-                console.log('[iOS Compat Mode] Playing:', label);
+                console.log('[iOS Mode] Playing:', label);
               } catch (err) {
-                console.error('[iOS Compat Mode] Play failed:', err);
+                console.error('[iOS Mode] Play failed:', err);
               }
             }
 
@@ -1484,6 +1475,21 @@
               
               preloadSamples();
             }, []);
+
+            // Pre-load HTML5 Audio elements when iOS mode is active (reduces latency)
+            useEffect(() => {
+              if (useIOSCompatMode) {
+                console.log('[iOS Mode] Pre-loading HTML5 Audio pool...');
+                FILE_LABELS.forEach(label => {
+                  const audio = new Audio(`assets/samples/${label}.mp3`);
+                  audio.preload = 'auto'; // Force browser to load immediately
+                  audio.load(); // Start loading
+                  html5AudioPool.current[label] = audio;
+                  console.log(`[iOS Mode] Pre-loaded: ${label}.mp3`);
+                });
+                console.log('[iOS Mode] ✅ All HTML5 Audio samples pre-loaded');
+              }
+            }, [useIOSCompatMode]);
 
             // Global event listener to unlock iOS audio on FIRST user interaction
             useEffect(() => {
@@ -2124,16 +2130,10 @@
             const [masterVolume, setMasterVolume] = useState(0.7);
             const [muted, setMuted] = useState(false);
 
-            // iOS Compatibility Mode: Use HTML5 Audio instead of Web Audio API
-            // This bypasses the silent switch but loses reverb/fade effects
-            const [useIOSCompatMode, setUseIOSCompatMode] = useState(() => {
-              try {
-                const saved = localStorage.getItem('ios_compat_mode');
-                return saved === 'true';
-              } catch {
-                return false;
-              }
-            });
+            // Auto-detect iOS devices: Use HTML5 Audio for iPhone/iPad/iPod
+            // This bypasses the silent switch automatically (no user action needed)
+            // Desktop and Android get Web Audio API with reverb
+            const useIOSCompatMode = /iPhone|iPad|iPod/.test(navigator.userAgent);
 
             const { playPc, setMasterVolume: updateAudioVolume, playScale } = usePianoSamples(masterVolume, muted, useIOSCompatMode);
             const result = useMemo(() => getPossibleKeys(selected), [selected]);
@@ -2732,66 +2732,6 @@
                           ]
                     )
                   ]
-                ),
-
-                /* iOS Compatibility Mode Banner */
-                !useIOSCompatMode && /iPhone|iPad|iPod/.test(navigator.userAgent) && React.createElement(
-                  "div",
-                  {
-                    key: "ios-compat-banner",
-                    className: "mb-4 mx-auto px-4",
-                    style: { maxWidth: laneWidth + "px" }
-                  },
-                  React.createElement(
-                    "div",
-                    {
-                      className: "rounded-lg border border-amber-600/40 bg-amber-900/20 p-3 text-sm",
-                      style: {
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "12px"
-                      }
-                    },
-                    [
-                      React.createElement(
-                        "div",
-                        {
-                          key: "icon",
-                          style: { color: "#fbbf24", fontSize: "20px", flexShrink: 0 }
-                        },
-                        "⚠️"
-                      ),
-                      React.createElement(
-                        "div",
-                        {
-                          key: "text",
-                          style: { flex: 1, color: "#fcd34d" }
-                        },
-                        "No sound? Your silent switch may be ON. "
-                      ),
-                      React.createElement(
-                        "button",
-                        {
-                          key: "btn",
-                          onClick: () => {
-                            setUseIOSCompatMode(true);
-                            try {
-                              localStorage.setItem('ios_compat_mode', 'true');
-                            } catch {}
-                          },
-                          className: "px-3 py-1.5 rounded-md font-semibold text-sm whitespace-nowrap",
-                          style: {
-                            background: "#fbbf24",
-                            color: "#1a1a1a",
-                            border: "none",
-                            cursor: "pointer",
-                            flexShrink: 0
-                          }
-                        },
-                        "Enable iOS Mode"
-                      )
-                    ]
-                  )
                 ),
 
                 /* Piano card */
