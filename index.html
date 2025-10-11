@@ -1130,7 +1130,7 @@
             a.size === b.size && [...a].every((x) => b.has(x));
 
           /* ---------- Audio ---------- */
-          function usePianoSamples(masterVolume = 0.7, muted = false) {
+          function usePianoSamples(masterVolume = 0.7, muted = false, useIOSCompatMode = false) {
             const ctxRef = useRef(null);
             const buffers = useRef({});
             const currentRef = useRef(null);
@@ -1138,6 +1138,7 @@
             const reverbRef = useRef(null);
             const iosUnlockedRef = useRef(false);
             const silentAudioRef = useRef(null);
+            const html5AudioPool = useRef({}); // Pool of HTML5 Audio elements for iOS compat mode
 
             const ensure = () => {
               if (!ctxRef.current) {
@@ -1367,7 +1368,9 @@
                 }
               }
             }
-            async function playPc(pc, muted) {
+
+            // Web Audio API playback (high quality with reverb and fades)
+            async function playPcWebAudio(pc, muted) {
               // Unlock iOS audio on first user interaction (must happen before mute check)
               unlockIOSAudio();
 
@@ -1401,6 +1404,52 @@
                 src.stop(now + duration); // Stop at natural end with fade-out
               } catch {
                 fallback(pc);
+              }
+            }
+
+            // HTML5 Audio playback (iOS compatibility mode - bypasses silent switch)
+            // No reverb or smooth fades, but works with iOS silent switch ON
+            async function playPcHTML5Audio(pc, muted) {
+              if (muted) return;
+
+              const label = fileLabel(PITCHES[pc].name);
+              const audioPath = `assets/samples/${label}.mp3`;
+
+              // Create or reuse HTML5 Audio element for this note
+              if (!html5AudioPool.current[label]) {
+                html5AudioPool.current[label] = new Audio(audioPath);
+                html5AudioPool.current[label].preload = 'auto';
+              }
+
+              const audio = html5AudioPool.current[label];
+
+              // Stop current audio if playing
+              if (currentRef.current) {
+                try {
+                  currentRef.current.pause();
+                  currentRef.current.currentTime = 0;
+                } catch {}
+              }
+
+              // Set volume and play
+              audio.volume = masterVolume;
+              audio.currentTime = 0; // Reset to start
+
+              try {
+                await audio.play();
+                currentRef.current = audio;
+                console.log('[iOS Compat Mode] Playing:', label);
+              } catch (err) {
+                console.error('[iOS Compat Mode] Play failed:', err);
+              }
+            }
+
+            // Wrapper function that selects the appropriate playback method
+            async function playPc(pc, muted) {
+              if (useIOSCompatMode) {
+                await playPcHTML5Audio(pc, muted);
+              } else {
+                await playPcWebAudio(pc, muted);
               }
             }
             // Preload all samples on component mount
@@ -2074,7 +2123,19 @@
             const { selected, toggle, reset, setFromPcs } = usePitchSelection();
             const [masterVolume, setMasterVolume] = useState(0.7);
             const [muted, setMuted] = useState(false);
-            const { playPc, setMasterVolume: updateAudioVolume, playScale } = usePianoSamples(masterVolume, muted);
+
+            // iOS Compatibility Mode: Use HTML5 Audio instead of Web Audio API
+            // This bypasses the silent switch but loses reverb/fade effects
+            const [useIOSCompatMode, setUseIOSCompatMode] = useState(() => {
+              try {
+                const saved = localStorage.getItem('ios_compat_mode');
+                return saved === 'true';
+              } catch {
+                return false;
+              }
+            });
+
+            const { playPc, setMasterVolume: updateAudioVolume, playScale } = usePianoSamples(masterVolume, muted, useIOSCompatMode);
             const result = useMemo(() => getPossibleKeys(selected), [selected]);
 
             // Usage tracking for freemium flow (simplified)
@@ -2671,6 +2732,66 @@
                           ]
                     )
                   ]
+                ),
+
+                /* iOS Compatibility Mode Banner */
+                !useIOSCompatMode && /iPhone|iPad|iPod/.test(navigator.userAgent) && React.createElement(
+                  "div",
+                  {
+                    key: "ios-compat-banner",
+                    className: "mb-4 mx-auto px-4",
+                    style: { maxWidth: laneWidth + "px" }
+                  },
+                  React.createElement(
+                    "div",
+                    {
+                      className: "rounded-lg border border-amber-600/40 bg-amber-900/20 p-3 text-sm",
+                      style: {
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "12px"
+                      }
+                    },
+                    [
+                      React.createElement(
+                        "div",
+                        {
+                          key: "icon",
+                          style: { color: "#fbbf24", fontSize: "20px", flexShrink: 0 }
+                        },
+                        "⚠️"
+                      ),
+                      React.createElement(
+                        "div",
+                        {
+                          key: "text",
+                          style: { flex: 1, color: "#fcd34d" }
+                        },
+                        "No sound? Your silent switch may be ON. "
+                      ),
+                      React.createElement(
+                        "button",
+                        {
+                          key: "btn",
+                          onClick: () => {
+                            setUseIOSCompatMode(true);
+                            try {
+                              localStorage.setItem('ios_compat_mode', 'true');
+                            } catch {}
+                          },
+                          className: "px-3 py-1.5 rounded-md font-semibold text-sm whitespace-nowrap",
+                          style: {
+                            background: "#fbbf24",
+                            color: "#1a1a1a",
+                            border: "none",
+                            cursor: "pointer",
+                            flexShrink: 0
+                          }
+                        },
+                        "Enable iOS Mode"
+                      )
+                    ]
+                  )
                 ),
 
                 /* Piano card */
