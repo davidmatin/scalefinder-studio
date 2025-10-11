@@ -9,11 +9,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Architecture
 
 ### Technology Stack
-- **Single-file HTML application** - All code in `index.html` (~2869 lines)
+- **Single-file HTML application** - All code in `index.html` (~2900+ lines)
 - **React 18** via CDN (UMD build, no build system)
 - **Tailwind CSS** via CDN
 - **Clerk Authentication** (Browser SDK) for user auth
-- **Web Audio API** for piano samples and audio playback
+- **Hybrid Audio System** - Web Audio API (desktop/Android) + HTML5 Audio (iOS with silent switch bypass)
+- **Automatic platform detection** - iOS vs desktop/Android via user agent
 - **No package.json** - This is intentionally a standalone HTML file
 
 ### Code Structure (within index.html)
@@ -111,26 +112,57 @@ When editing:
 
 ### Audio System Notes
 
-The piano samples are loaded from `assets/samples/` directory:
-- Files named by pitch class: `C.mp3`, `Cs.mp3` (sharp = 's'), `D.mp3`, `Ds.mp3`, etc.
-- Multiple fallback paths attempted in loadNote() function (line 1122): tries `assets/samples/`, `./assets/samples/`, `/assets/samples/`, `/nodebox/assets/samples/`
-- Uses Web Audio API with reverb convolver for spatial depth (line 1059)
-- Reverb impulse response: 1.2 second decay with exponential decay curve (lines 1062-1073)
-- Master volume control with gain node (lines 1076-1077)
-- Volume slider range: 0-100, mapped to gain values 0.0-1.0 (line 1289)
+**Hybrid Audio Architecture**: Automatic platform-specific audio systems for optimal experience.
 
-#### iOS Silent Switch Bypass
-**Critical for iPhone users**: Implemented silent audio unlock technique (lines 1182-1211 for unlock function, lines 1418-1432 for global listener) to bypass iOS silent switch:
-- Creates a silent looping HTML5 audio element (volume 0.1) on first user interaction
-- Forces Web Audio API to use "media" category instead of "ringer" category
-- Allows piano sounds to play even when iPhone silent switch is ON
-- **Triggered automatically on FIRST touch/click anywhere on page** (global document listener)
-- Also triggered on piano key press or scale playback as fallback
+#### Desktop & Android (Web Audio API)
+- High-quality playback with reverb convolver for spatial depth (line 1147)
+- Reverb impulse response: 1.2 second decay with exponential decay curve (lines 1151-1162)
+- Master volume control with gain node (lines 1165-1166)
+- Smooth fade-in/fade-out envelopes (50ms attack, 100ms release) at lines 1394-1397
+- Console logs: Standard Web Audio API messages
+
+#### iOS (HTML5 Audio)
+- HTML5 Audio elements bypass silent switch (works with switch ON)
+- Pre-loaded audio pool with stored duration metadata
+- 300ms exponential fade-out via `requestAnimationFrame` (60fps smooth)
+- No reverb (trade-off for silent switch compatibility)
+- Console logs: "[iOS Mode] Playing: C.mp3 (duration: 2.47s, fade: 0.3s exponential)"
+
+#### Piano Samples
+- Files located in `assets/samples/` directory
+- Named by pitch class: `C.mp3`, `Cs.mp3` (sharp = 's'), `D.mp3`, `Ds.mp3`, etc.
+- Multiple fallback paths attempted in loadNote() function (line 1242): tries `assets/samples/`, `./assets/samples/`, `/Users/adrm/Desktop/keyclick/assets/samples/`, `samples/`, `./samples/`
+- Volume slider range: 0-100, mapped to gain values 0.0-1.0 (line 1434 for HTML5, masterGain for Web Audio)
+
+#### iOS Audio System - Automatic Silent Switch Bypass
+**Critical for iPhone users**: Automatic platform detection and dual audio system ensures audio works with iPhone silent switch ON:
+
+**Platform Detection (line ~2130):**
+- Automatically detects iOS devices via user agent: `/iPhone|iPad|iPod/.test(navigator.userAgent)`
+- No user interaction required - completely transparent
+- iOS users get HTML5 Audio, desktop/Android users get Web Audio API
+
+**iOS Silent Switch Bypass (lines 1186-1232):**
+- Creates brief silent audio on first user interaction to unlock media playback
+- **Triggered automatically on FIRST touch/click anywhere on page** (global document listener at lines 1544-1560)
 - Only runs once per session (tracked with `iosUnlockedRef`)
-- Silent audio element persisted in `silentAudioRef` to prevent re-creation
-- Console logs: "iOS audio unlocked - Web Audio will now bypass silent switch"
+- Console logs: "[iOS Bypass] ✅ UNLOCKED - AudioContext should stay unlocked for session"
 
-This solves the common UX issue where new users on iPhone with silent mode enabled hear no sound and abandon the site. The global listener ensures audio unlocks immediately on first page interaction, not just piano interactions.
+**HTML5 Audio System for iOS (lines 1410-1503):**
+- Pre-loads all 12 piano samples with duration metadata (lines 1521-1542)
+- Uses `cloneNode()` for instant playback with natural note overlap
+- **Exponential fade-out** eliminates clicking sounds at note end (300ms fade)
+- Fade algorithm: `volume = startVolume × 0.01^progress` (natural piano decay)
+- Uses `requestAnimationFrame` for smooth 60fps fade-out
+- Console logs: "[iOS Mode] Playing: C.mp3 (duration: 2.47s, fade: 0.3s exponential)"
+
+**Technical Details:**
+- Duration captured via `loadedmetadata` event and stored in pool
+- Fixes issue where `cloneNode()` doesn't inherit metadata
+- No reverb on iOS (trade-off for silent switch bypass)
+- See `audio-click-fix-plan.md` for complete technical deep-dive
+
+This solves the common UX issue where new users on iPhone with silent mode enabled hear no sound and abandon the site. The automatic detection ensures zero user friction.
 
 ### Responsive Design
 
@@ -190,7 +222,7 @@ Without these settings, sign-in/sign-out will redirect to Clerk's hosted page bu
 
 ```
 keyclick/
-├── index.html                      # Entire application (~2869 lines)
+├── index.html                      # Entire application (~2900+ lines)
 ├── assets/
 │   └── samples/                    # Piano audio samples
 │       ├── C.mp3
@@ -205,8 +237,11 @@ keyclick/
 │       ├── A.mp3
 │       ├── As.mp3                  # A# / B♭
 │       └── B.mp3
+├── .claude/
+│   └── settings.local.json         # Claude Code permissions config
 ├── .gitignore
-└── CLAUDE.md                       # This file
+├── CLAUDE.md                       # This file
+└── audio-click-fix-plan.md         # Technical deep-dive: iOS audio click fix
 ```
 
 ## Music Theory Implementation Notes
