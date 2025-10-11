@@ -3022,10 +3022,16 @@
                   "section",
                   {
                     className: "possible-keys-card mb-4 mx-auto",
-                    style: {
-                      maxWidth: laneWidth + "px",
-                      width: "100%"
-                    },
+                    style: (groupedKeys => {
+                      const major = result.keys.filter(k => k.type === "Major");
+                      const minor = result.keys.filter(k => k.type === "Minor");
+                      const isRelativePair = (major.length === 1 && minor.length === 1);
+                      return {
+                        maxWidth: laneWidth + "px",
+                        width: "100%",
+                        minHeight: isRelativePair ? "200px" : "auto"
+                      };
+                    })()
                   },
                   React.createElement(
                     "div",
