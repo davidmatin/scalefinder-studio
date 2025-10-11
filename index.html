@@ -1179,44 +1179,51 @@
               return ctxRef.current;
             };
 
-            // iOS Silent Switch Bypass: Unlock audio on first interaction
+            // iOS Silent Switch Bypass: Play HTML5 audio ONCE to unlock AudioContext
+            // Modern iOS (13+) only needs HTML5 audio to play ONCE to unlock the AudioContext
+            // No continuous looping needed - the unlock persists for the session!
             const unlockIOSAudio = () => {
               if (iosUnlockedRef.current) return;
 
-              console.log('[iOS Bypass] Starting unlock attempt...');
+              console.log('[iOS Bypass] Starting one-time unlock...');
               const ctx = ensure();
 
-              // Create or reuse HTML5 audio element using one of our piano samples
+              // Create HTML5 audio element - will play ONCE only
               if (!silentAudioRef.current) {
-                // Use actual piano sample (C.mp3) but muted
-                // This is more reliable than synthetic audio for iOS
                 silentAudioRef.current = new Audio('assets/samples/C.mp3');
-                silentAudioRef.current.loop = true;
-                silentAudioRef.current.muted = true; // Use muted attribute instead of volume
-                silentAudioRef.current.volume = 0; // Belt and suspenders
+
+                // KEY CHANGE: NO LOOPING - play once and stop
+                silentAudioRef.current.loop = false;
+
+                // Set volume to 0 (silent) - it's brief so doesn't matter
+                silentAudioRef.current.volume = 0;
+                silentAudioRef.current.muted = true;
+
                 silentAudioRef.current.setAttribute('playsinline', '');
                 silentAudioRef.current.setAttribute('webkit-playsinline', '');
                 silentAudioRef.current.preload = 'auto';
-                console.log('[iOS Bypass] Created MUTED audio element with C.mp3 sample');
+
+                console.log('[iOS Bypass] Created one-time unlock audio (no loop)');
               }
 
-              // Ensure it's muted before playing
-              silentAudioRef.current.muted = true;
-              silentAudioRef.current.volume = 0;
-
-              // Play the looping audio to force iOS into "media" playback mode
+              // Play the audio ONCE to unlock iOS media category
               const playPromise = silentAudioRef.current.play();
               if (playPromise !== undefined) {
                 playPromise.then(() => {
-                  console.log('[iOS Bypass] Audio element playing successfully');
-                  // Resume AudioContext (critical for Web Audio API)
+                  console.log('[iOS Bypass] Unlock audio playing (will stop after one play)');
+
+                  // Resume AudioContext (this is the key unlock for Web Audio API)
                   if (ctx.state === 'suspended') {
                     ctx.resume().then(() => {
                       console.log('[iOS Bypass] AudioContext resumed, state:', ctx.state);
+                      console.log('[iOS Bypass] ✅ UNLOCKED - AudioContext should stay unlocked for session');
                     });
                   }
+
                   iosUnlockedRef.current = true;
-                  console.log('[iOS Bypass] ✅ COMPLETE - iOS audio unlocked, silent switch bypassed');
+
+                  // The audio will stop naturally after playing once (loop=false)
+                  // AudioContext remains unlocked for the entire session
                 }).catch(err => {
                   console.error('[iOS Bypass] ❌ FAILED:', err);
                 });
@@ -1445,26 +1452,9 @@
               };
             }, []);
 
-            // Control silent audio element based on mute state
-            // Keep muted and volume at 0 always
-            useEffect(() => {
-              if (silentAudioRef.current) {
-                silentAudioRef.current.muted = true; // Always muted
-                silentAudioRef.current.volume = 0; // Always silent
-                if (muted) {
-                  silentAudioRef.current.pause();
-                  console.log('[iOS Bypass] Silent audio paused');
-                } else {
-                  // Resume playing if it was paused
-                  if (silentAudioRef.current.paused) {
-                    silentAudioRef.current.play().catch(err => {
-                      console.warn('[iOS Bypass] Failed to resume silent audio:', err);
-                    });
-                    console.log('[iOS Bypass] Silent audio resumed');
-                  }
-                }
-              }
-            }, [muted]);
+            // NOTE: No need to manage silent audio in useEffect anymore
+            // The audio plays ONCE on first interaction, then stops naturally (loop=false)
+            // The AudioContext unlock persists for the entire session
 
             return { playPc, stopCurrent, setMasterVolume, playScale };
           }
