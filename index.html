@@ -1180,67 +1180,47 @@
             };
 
             // iOS Silent Switch Bypass: Unlock audio on first interaction
-            // CRITICAL: Returns a Promise that resolves when unlock is complete
             const unlockIOSAudio = () => {
-              return new Promise((resolve, reject) => {
-                // If already unlocked, resolve immediately
-                if (iosUnlockedRef.current) {
-                  resolve();
-                  return;
-                }
+              if (iosUnlockedRef.current) return;
 
-                console.log('[iOS Bypass] Starting unlock attempt...');
-                const ctx = ensure();
+              console.log('[iOS Bypass] Starting unlock attempt...');
+              const ctx = ensure();
 
-                // Create or reuse HTML5 audio element using one of our piano samples
-                if (!silentAudioRef.current) {
-                  silentAudioRef.current = new Audio('assets/samples/C.mp3');
-                  silentAudioRef.current.loop = true;
+              // Create or reuse HTML5 audio element using one of our piano samples
+              if (!silentAudioRef.current) {
+                // Use actual piano sample (C.mp3) but muted
+                // This is more reliable than synthetic audio for iOS
+                silentAudioRef.current = new Audio('assets/samples/C.mp3');
+                silentAudioRef.current.loop = true;
+                silentAudioRef.current.muted = true; // Use muted attribute instead of volume
+                silentAudioRef.current.volume = 0; // Belt and suspenders
+                silentAudioRef.current.setAttribute('playsinline', '');
+                silentAudioRef.current.setAttribute('webkit-playsinline', '');
+                silentAudioRef.current.preload = 'auto';
+                console.log('[iOS Bypass] Created MUTED audio element with C.mp3 sample');
+              }
 
-                  // CRITICAL: DO NOT mute the audio element
-                  // iOS needs to detect actual audio playback to switch to media category
-                  // Setting a low volume makes it barely audible but still effective
-                  silentAudioRef.current.volume = 0.01; // 1% volume - barely audible
+              // Ensure it's muted before playing
+              silentAudioRef.current.muted = true;
+              silentAudioRef.current.volume = 0;
 
-                  silentAudioRef.current.setAttribute('playsinline', '');
-                  silentAudioRef.current.setAttribute('webkit-playsinline', '');
-                  silentAudioRef.current.preload = 'auto';
-
-                  console.log('[iOS Bypass] Created low-volume looping audio (volume=0.01)');
-                }
-
-                // Ensure volume is set (not muted)
-                silentAudioRef.current.volume = 0.01;
-
-                // Play the looping audio to force iOS into "media" playback mode
-                const playPromise = silentAudioRef.current.play();
-
-                if (playPromise !== undefined) {
-                  playPromise
-                    .then(() => {
-                      console.log('[iOS Bypass] Audio element playing successfully');
-
-                      // Resume AudioContext (critical for Web Audio API)
-                      if (ctx.state === 'suspended') {
-                        return ctx.resume();
-                      }
-                    })
-                    .then(() => {
+              // Play the looping audio to force iOS into "media" playback mode
+              const playPromise = silentAudioRef.current.play();
+              if (playPromise !== undefined) {
+                playPromise.then(() => {
+                  console.log('[iOS Bypass] Audio element playing successfully');
+                  // Resume AudioContext (critical for Web Audio API)
+                  if (ctx.state === 'suspended') {
+                    ctx.resume().then(() => {
                       console.log('[iOS Bypass] AudioContext resumed, state:', ctx.state);
-                      iosUnlockedRef.current = true;
-                      console.log('[iOS Bypass] ✅ COMPLETE - iOS audio unlocked, silent switch bypassed');
-                      resolve();
-                    })
-                    .catch(err => {
-                      console.error('[iOS Bypass] ❌ FAILED:', err);
-                      reject(err);
                     });
-                } else {
-                  // Older browsers without promise support
+                  }
                   iosUnlockedRef.current = true;
-                  resolve();
-                }
-              });
+                  console.log('[iOS Bypass] ✅ COMPLETE - iOS audio unlocked, silent switch bypassed');
+                }).catch(err => {
+                  console.error('[iOS Bypass] ❌ FAILED:', err);
+                });
+              }
             };
 
             async function fetchDecode(url) {
@@ -1382,22 +1362,13 @@
             }
             async function playPc(pc, muted) {
               // Unlock iOS audio on first user interaction (must happen before mute check)
-              // CRITICAL: Wait for unlock to complete before proceeding
-              try {
-                await unlockIOSAudio();
-              } catch (err) {
-                console.error('[Scale Finder Studio] iOS unlock failed:', err);
-              }
+              unlockIOSAudio();
 
               // If muted, return early after unlocking iOS audio
               if (muted) return;
 
               const ctx = ensure();
-
-              // Ensure AudioContext is running
-              if (ctx.state === "suspended") {
-                await ctx.resume();
-              }
+              if (ctx.state === "suspended") await ctx.resume();
               const label = fileLabel(PITCHES[pc].name);
               try {
                 const buf = await loadNote(label);
@@ -1475,22 +1446,21 @@
             }, []);
 
             // Control silent audio element based on mute state
+            // Keep muted and volume at 0 always
             useEffect(() => {
-              if (silentAudioRef.current && iosUnlockedRef.current) {
-                // Keep volume low but NOT muted (critical for iOS bypass)
-                silentAudioRef.current.volume = 0.01;
-
+              if (silentAudioRef.current) {
+                silentAudioRef.current.muted = true; // Always muted
+                silentAudioRef.current.volume = 0; // Always silent
                 if (muted) {
-                  // When app is muted, pause the looping audio to save resources
                   silentAudioRef.current.pause();
-                  console.log('[iOS Bypass] Silent audio paused (app muted)');
+                  console.log('[iOS Bypass] Silent audio paused');
                 } else {
                   // Resume playing if it was paused
                   if (silentAudioRef.current.paused) {
                     silentAudioRef.current.play().catch(err => {
                       console.warn('[iOS Bypass] Failed to resume silent audio:', err);
                     });
-                    console.log('[iOS Bypass] Silent audio resumed (app unmuted)');
+                    console.log('[iOS Bypass] Silent audio resumed');
                   }
                 }
               }
