@@ -766,15 +766,16 @@
 
       /* Mobile responsive fixes for iPhone SE and small screens */
       @media (max-width: 768px) {
-        /* Move auth buttons below logo on mobile */
+        /* Keep auth buttons in upper-right on mobile for consistency */
         header {
-          flex-direction: column !important;
+          flex-direction: row !important;
+          justify-content: space-between !important;
         }
 
         .auth-section {
-          position: static !important;
-          margin-top: 16px !important;
-          justify-content: center !important;
+          position: relative !important;
+          margin-top: 0 !important;
+          justify-content: flex-end !important;
         }
       }
 
