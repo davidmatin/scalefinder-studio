@@ -173,6 +173,46 @@ Mobile breakpoints:
 
 Media query sections: lines 745-809
 
+#### Mobile UI Alignment - Relative Key Pairs
+
+When only major/minor relative pair is displayed (`isRelativePairOnly` condition):
+
+**Piano Card Centering (line 2829):**
+- `transform: "translateX(-20px)"` - Shifts piano left to compensate for viewport asymmetry on mobile
+- Ensures visual centering on small screens
+
+**Button Container Layout (line 3032):**
+- Fixed `height: "165px"` for relative pairs (auto for multiple keys)
+- Provides consistent vertical spacing and prevents container expansion
+
+**Button Positioning (line 1779):**
+- `paddingTop: "0"` - Removes top padding for tighter layout
+- `paddingBottom: "1rem"` - Maintains bottom spacing
+- `paddingLeft: "1.5rem"` - Shifts buttons right to center them within their container
+
+**X Button Vertical Alignment:**
+- Major button X (line 1853): `marginTop: "-35px"` - Moves X up relative to button
+- Minor button X (line 1952): `marginTop: "-15px"` - Less negative margin due to subtitle presence
+- Ensures both X buttons align at same vertical position despite different button structures
+
+**Subtitle Spacing (line 1904):**
+- Button wrapper uses `gap-0` (no gap between button and subtitle)
+- "relative minor" text appears immediately below button for compact layout
+
+**Button Height Matching:**
+- Major button (line 1838): 30px invisible placeholder (`visibility: hidden`) maintains vertical space
+- Minor button (line 1937): 30px visible subtitle with flex centering for "relative minor" text
+- Equal heights ensure X buttons can align using marginTop adjustments
+
+**Minor Button Vertical Adjustment (line 1904):**
+- `marginTop: "1rem"` shifts entire minor button wrapper down
+- Compensates for structural differences to align with major button
+
+**Clerk User Button on Mobile (lines 768-783):**
+- Changed from centered-below-logo to upper-right corner via absolute positioning
+- `position: absolute`, `top: 0`, `right: 0` for consistency with desktop layout
+- Provides familiar auth UI pattern across all devices
+
 ### Common Tasks
 
 **Add new scale type**: Update `SCALE_INTERVALS` (line 966) with interval pattern, add chord pattern if needed for major/minor variants
