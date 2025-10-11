@@ -1850,6 +1850,7 @@
                                     "transition-opacity duration-200 rounded-md hover:bg-zinc-800/50 p-1 " +
                                     (selectedKey === k.name ? "opacity-50 hover:opacity-100 cursor-pointer" : "opacity-0 pointer-events-none"),
                                   title: selectedKey === k.name ? "Reset selection" : "",
+                                  style: { marginTop: "-10px" }
                                 },
                                 React.createElement(
                                   "svg",
@@ -1900,7 +1901,7 @@
                           [
                             React.createElement(
                               "div",
-                              { key: "button-wrapper", className: "flex flex-col items-center gap-1" },
+                              { key: "button-wrapper", className: "flex flex-col items-center gap-1", style: isRelativePairOnly ? { marginTop: "0.5rem" } : {} },
                               [
                                 React.createElement(
                                   "button",
@@ -1948,6 +1949,7 @@
                                     "transition-opacity duration-200 rounded-md hover:bg-zinc-800/50 p-1 " +
                                     (selectedKey === k.name ? "opacity-50 hover:opacity-100 cursor-pointer" : "opacity-0 pointer-events-none"),
                                   title: selectedKey === k.name ? "Reset selection" : "",
+                                  style: { marginTop: "-10px" }
                                 },
                                 React.createElement(
                                   "svg",
