@@ -1408,30 +1408,98 @@
             }
 
             // HTML5 Audio playback (iOS compatibility mode - bypasses silent switch)
-            // No reverb or smooth fades, but works with iOS silent switch ON
+            // No reverb, but works with iOS silent switch ON
             // Uses cloneNode() for instant playback and natural note overlap
+            // Includes fade-out to eliminate clicking sound at end
             async function playPcHTML5Audio(pc, muted) {
               if (muted) return;
 
               const label = fileLabel(PITCHES[pc].name);
               const audioPath = `assets/samples/${label}.mp3`;
 
-              // Ensure the base audio element exists in the pool
-              if (!html5AudioPool.current[label]) {
-                html5AudioPool.current[label] = new Audio(audioPath);
-                html5AudioPool.current[label].preload = 'auto';
-                console.log('[iOS Mode] Created base audio element:', label);
+              // Get base audio and duration from pool (or create if missing)
+              let poolEntry = html5AudioPool.current[label];
+
+              if (!poolEntry) {
+                // Fallback: create audio element on-demand if pool not ready
+                const audio = new Audio(audioPath);
+                audio.preload = 'auto';
+                poolEntry = { audio, duration: null }; // Duration will be NaN initially
+                html5AudioPool.current[label] = poolEntry;
+                console.log('[iOS Mode] Created base audio element on-demand:', label);
               }
 
               // Clone the pre-loaded element for instant playback (no loading delay)
-              const audio = html5AudioPool.current[label].cloneNode();
+              const audio = poolEntry.audio.cloneNode();
               audio.volume = masterVolume;
 
-              try {
-                await audio.play();
-                console.log('[iOS Mode] Playing:', label);
-              } catch (err) {
-                console.error('[iOS Mode] Play failed:', err);
+              // Use stored duration from pool (not cloned element's duration which may be NaN)
+              const duration = poolEntry.duration;
+
+              // Add fade-out to prevent clicking sound at end (only if duration is known)
+              let fadeAnimationFrame = null;
+              const fadeOutDuration = 0.3; // 300ms fade-out (increased from 100ms for smoother fade)
+
+              if (duration && duration > fadeOutDuration) {
+                const fadeStartTime = duration - fadeOutDuration;
+
+                const handleTimeUpdate = () => {
+                  if (audio.currentTime >= fadeStartTime && !fadeAnimationFrame) {
+                    const startVolume = audio.volume;
+                    const fadeStartTimestamp = performance.now();
+
+                    // Use requestAnimationFrame for smooth 60fps fade-out
+                    const fadeLoop = (currentTimestamp) => {
+                      const elapsed = (currentTimestamp - fadeStartTimestamp) / 1000; // Convert to seconds
+                      const progress = Math.min(elapsed / fadeOutDuration, 1); // 0 to 1
+
+                      // Exponential decay curve (sounds more natural, like piano decay)
+                      // volume(t) = startVolume × 0.01^progress
+                      audio.volume = startVolume * Math.pow(0.01, progress);
+
+                      if (progress < 1 && audio.volume > 0.001) {
+                        fadeAnimationFrame = requestAnimationFrame(fadeLoop);
+                      } else {
+                        audio.volume = 0;
+                        fadeAnimationFrame = null;
+                      }
+                    };
+
+                    fadeAnimationFrame = requestAnimationFrame(fadeLoop);
+                  }
+                };
+
+                // Clean up on audio end
+                const handleEnded = () => {
+                  if (fadeAnimationFrame) {
+                    cancelAnimationFrame(fadeAnimationFrame);
+                    fadeAnimationFrame = null;
+                  }
+                  audio.removeEventListener('timeupdate', handleTimeUpdate);
+                  audio.removeEventListener('ended', handleEnded);
+                };
+
+                audio.addEventListener('timeupdate', handleTimeUpdate);
+                audio.addEventListener('ended', handleEnded);
+
+                try {
+                  await audio.play();
+                  console.log('[iOS Mode] Playing:', label, `(duration: ${duration?.toFixed(2)}s, fade: ${fadeOutDuration}s exponential)`);
+                } catch (err) {
+                  console.error('[iOS Mode] Play failed:', err);
+                  // Clean up on error
+                  if (fadeAnimationFrame) cancelAnimationFrame(fadeAnimationFrame);
+                  audio.removeEventListener('timeupdate', handleTimeUpdate);
+                  audio.removeEventListener('ended', handleEnded);
+                }
+              } else {
+                // No fade-out if duration unknown (should rarely happen after pre-load)
+                try {
+                  await audio.play();
+                  console.log('[iOS Mode] Playing:', label, '(no fade - duration unknown)');
+                } catch (err) {
+                  console.error('[iOS Mode] Play failed:', err);
+                }
               }
             }
 
@@ -1483,11 +1551,19 @@
                 FILE_LABELS.forEach(label => {
                   const audio = new Audio(`assets/samples/${label}.mp3`);
                   audio.preload = 'auto'; // Force browser to load immediately
+
+                  // Capture duration when metadata loads (critical for fade-out)
+                  audio.addEventListener('loadedmetadata', () => {
+                    html5AudioPool.current[label] = {
+                      audio,
+                      duration: audio.duration
+                    };
+                    console.log(`[iOS Mode] Pre-loaded: ${label}.mp3 (duration: ${audio.duration.toFixed(2)}s)`);
+                  });
+
                   audio.load(); // Start loading
-                  html5AudioPool.current[label] = audio;
-                  console.log(`[iOS Mode] Pre-loaded: ${label}.mp3`);
                 });
-                console.log('[iOS Mode] ✅ All HTML5 Audio samples pre-loaded');
+                console.log('[iOS Mode] ✅ HTML5 Audio pool loading...');
               }
             }, [useIOSCompatMode]);
 
