@@ -1130,7 +1130,7 @@
             a.size === b.size && [...a].every((x) => b.has(x));
 
           /* ---------- Audio ---------- */
-          function usePianoSamples(masterVolume = 0.7) {
+          function usePianoSamples(masterVolume = 0.7, muted = false) {
             const ctxRef = useRef(null);
             const buffers = useRef({});
             const currentRef = useRef(null);
@@ -1438,6 +1438,19 @@
                 document.removeEventListener('click', firstInteractionHandler);
               };
             }, []);
+
+            // Control silent audio element volume based on mute state
+            useEffect(() => {
+              if (silentAudioRef.current) {
+                if (muted) {
+                  silentAudioRef.current.volume = 0;
+                  console.log('[iOS Bypass] Silent audio muted');
+                } else {
+                  silentAudioRef.current.volume = 0.001;
+                  console.log('[iOS Bypass] Silent audio unmuted');
+                }
+              }
+            }, [muted]);
 
             return { playPc, stopCurrent, setMasterVolume, playScale };
           }
@@ -2056,7 +2069,8 @@
           function App() {
             const { selected, toggle, reset, setFromPcs } = usePitchSelection();
             const [masterVolume, setMasterVolume] = useState(0.7);
-            const { playPc, setMasterVolume: updateAudioVolume, playScale } = usePianoSamples(masterVolume);
+            const [muted, setMuted] = useState(false);
+            const { playPc, setMasterVolume: updateAudioVolume, playScale } = usePianoSamples(masterVolume, muted);
             const result = useMemo(() => getPossibleKeys(selected), [selected]);
 
             // Usage tracking for freemium flow (simplified)
@@ -2116,7 +2130,6 @@
               }
             });
             const [chosenKey, setChosenKey] = useState("");
-            const [muted, setMuted] = useState(false);
             const [showVolumeControl, setShowVolumeControl] = useState(false);
 
             // Update audio volume when masterVolume state changes
