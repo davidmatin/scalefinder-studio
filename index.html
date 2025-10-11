@@ -1188,16 +1188,21 @@
 
               // Create or reuse HTML5 audio element using one of our piano samples
               if (!silentAudioRef.current) {
-                // Use actual piano sample (C.mp3) at very low volume
+                // Use actual piano sample (C.mp3) but muted
                 // This is more reliable than synthetic audio for iOS
                 silentAudioRef.current = new Audio('assets/samples/C.mp3');
                 silentAudioRef.current.loop = true;
-                silentAudioRef.current.volume = 0; // Completely silent
+                silentAudioRef.current.muted = true; // Use muted attribute instead of volume
+                silentAudioRef.current.volume = 0; // Belt and suspenders
                 silentAudioRef.current.setAttribute('playsinline', '');
                 silentAudioRef.current.setAttribute('webkit-playsinline', '');
                 silentAudioRef.current.preload = 'auto';
-                console.log('[iOS Bypass] Created audio element with C.mp3 sample');
+                console.log('[iOS Bypass] Created MUTED audio element with C.mp3 sample');
               }
+
+              // Ensure it's muted before playing
+              silentAudioRef.current.muted = true;
+              silentAudioRef.current.volume = 0;
 
               // Play the looping audio to force iOS into "media" playback mode
               const playPromise = silentAudioRef.current.play();
@@ -1440,9 +1445,10 @@
             }, []);
 
             // Control silent audio element based on mute state
-            // Keep volume at 0 always, but pause/play to save resources
+            // Keep muted and volume at 0 always
             useEffect(() => {
               if (silentAudioRef.current) {
+                silentAudioRef.current.muted = true; // Always muted
                 silentAudioRef.current.volume = 0; // Always silent
                 if (muted) {
                   silentAudioRef.current.pause();
