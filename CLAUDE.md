@@ -120,15 +120,17 @@ The piano samples are loaded from `assets/samples/` directory:
 - Volume slider range: 0-100, mapped to gain values 0.0-1.0 (line 1289)
 
 #### iOS Silent Switch Bypass
-**Critical for iPhone users**: Implemented silent audio unlock technique (lines 1095-1120) to bypass iOS silent switch:
-- Creates a silent looping HTML5 audio element on first user interaction
+**Critical for iPhone users**: Implemented silent audio unlock technique (lines 1182-1211 for unlock function, lines 1418-1432 for global listener) to bypass iOS silent switch:
+- Creates a silent looping HTML5 audio element (volume 0.1) on first user interaction
 - Forces Web Audio API to use "media" category instead of "ringer" category
 - Allows piano sounds to play even when iPhone silent switch is ON
-- Triggered automatically on first piano key press or scale playback
+- **Triggered automatically on FIRST touch/click anywhere on page** (global document listener)
+- Also triggered on piano key press or scale playback as fallback
 - Only runs once per session (tracked with `iosUnlockedRef`)
+- Silent audio element persisted in `silentAudioRef` to prevent re-creation
 - Console logs: "iOS audio unlocked - Web Audio will now bypass silent switch"
 
-This solves the common UX issue where new users on iPhone with silent mode enabled hear no sound and abandon the site.
+This solves the common UX issue where new users on iPhone with silent mode enabled hear no sound and abandon the site. The global listener ensures audio unlocks immediately on first page interaction, not just piano interactions.
 
 ### Responsive Design
 

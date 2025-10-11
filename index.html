@@ -1137,6 +1137,7 @@
             const masterGainRef = useRef(null);
             const reverbRef = useRef(null);
             const iosUnlockedRef = useRef(false);
+            const silentAudioRef = useRef(null);
 
             const ensure = () => {
               if (!ctxRef.current) {
@@ -1184,13 +1185,16 @@
 
               const ctx = ensure();
 
-              // Create silent audio element (tiny silent WAV file as data URI)
-              const silentAudio = new Audio('data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA');
-              silentAudio.loop = true;
-              silentAudio.volume = 0.01; // Nearly silent but not muted
+              // Create or reuse silent audio element
+              if (!silentAudioRef.current) {
+                // Create silent audio element (tiny silent WAV file as data URI)
+                silentAudioRef.current = new Audio('data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA');
+                silentAudioRef.current.loop = true;
+                silentAudioRef.current.volume = 0.1; // Low volume to ensure iOS categorizes as "media"
+              }
 
               // Play silent audio to switch iOS to "media" category
-              const playPromise = silentAudio.play();
+              const playPromise = silentAudioRef.current.play();
               if (playPromise !== undefined) {
                 playPromise.then(() => {
                   // Resume AudioContext
@@ -1199,6 +1203,7 @@
                   }
                   iosUnlockedRef.current = true;
                   console.log('iOS audio unlocked - Web Audio will now bypass silent switch');
+                  console.log('Silent audio element playing in background at volume:', silentAudioRef.current.volume);
                 }).catch(err => {
                   console.warn('iOS audio unlock failed:', err);
                 });
@@ -1409,6 +1414,23 @@
               
               preloadSamples();
             }, []);
+
+            // Global event listener to unlock iOS audio on FIRST user interaction
+            useEffect(() => {
+              const firstInteractionHandler = () => {
+                unlockIOSAudio();
+              };
+
+              // Listen for first touch or click anywhere on the page
+              document.addEventListener('touchstart', firstInteractionHandler, { once: true });
+              document.addEventListener('click', firstInteractionHandler, { once: true });
+
+              return () => {
+                document.removeEventListener('touchstart', firstInteractionHandler);
+                document.removeEventListener('click', firstInteractionHandler);
+              };
+            }, []);
+
             return { playPc, stopCurrent, setMasterVolume, playScale };
           }
 
