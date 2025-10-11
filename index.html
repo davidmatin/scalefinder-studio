@@ -1803,7 +1803,7 @@
                           "div",
                           {
                             key: k.name,
-                            className: "flex items-center justify-center relative gap-2",
+                            className: "flex items-center justify-center relative" + (isRelativePairOnly ? " gap-1" : " gap-2"),
                           },
                           [
                             React.createElement(
@@ -1828,12 +1828,6 @@
                                   },
                                   getKeyDisplayName(k.name)
                                 ),
-                                isRelativePairOnly &&
-                                  React.createElement(
-                                    "div",
-                                    { key: "subtitle", className: "text-[10px] opacity-60 font-normal text-center" },
-                                    "major"
-                                  )
                               ]
                             ),
                             isRelativePairOnly &&
@@ -1891,12 +1885,12 @@
                           "div",
                           {
                             key: k.name,
-                            className: "flex items-center justify-center relative gap-2",
+                            className: "flex items-center justify-center relative" + (isRelativePairOnly ? " gap-1" : " gap-2"),
                           },
                           [
                             React.createElement(
                               "div",
-                              { key: "button-wrapper", className: "flex flex-col items-center gap-1" },
+                              { key: "button-wrapper", className: "flex flex-col items-center gap-1", style: isRelativePairOnly ? { marginTop: "0.25rem" } : {} },
                               [
                                 React.createElement(
                                   "button",
