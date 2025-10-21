@@ -3039,55 +3039,42 @@
                       };
                     })()
                   },
-                  React.createElement(
-                    "div",
+                  React.createElement(KeysReadout, {
+                    result,
+                    onSelectKey: setChosenKey,
+                    selectedKey: chosenKey,
+                    onApplyScale: applyScale,
+                    onSave: (name, label) =>
+                      setHistory((prev) => [
+                        ...prev,
+                        { label, key: name, ts: Date.now() },
+                      ]),
+                    onReset: resetSelection,
+                  })
+                ),
+
+                /* Chord Progressions - Only show when final key is selected */
+                (() => {
+                  const major = result.keys.filter(k => k.type === "Major");
+                  const minor = result.keys.filter(k => k.type === "Minor");
+                  const isRelativePair = (major.length === 1 && minor.length === 1);
+                  return isRelativePair && chosenKey && React.createElement(
+                    "section",
                     {
-                      className: "grid items-start " + (result.status === "all-visible" ? "" : "gap-4"),
+                      className: "chord-progression-card mb-4 mx-auto",
                       style: {
-                        gridTemplateColumns: "1fr"
+                        maxWidth: laneWidth + "px",
+                        width: "100%"
                       }
                     },
-                    [
-                      React.createElement(
-                        "div",
-                        {
-                          key: "keys-column",
-                          className: "flex items-center justify-center h-full",
-                          style: (groupedKeys => {
-                            const major = result.keys.filter(k => k.type === "Major");
-                            const minor = result.keys.filter(k => k.type === "Minor");
-                            const isRelativePair = (major.length === 1 && minor.length === 1);
-                            return isRelativePair ? {
-                              position: "relative"
-                            } : {};
-                          })()
-                        },
-                        React.createElement(KeysReadout, {
-                          result,
-                          onSelectKey: setChosenKey,
-                          selectedKey: chosenKey,
-                          onApplyScale: applyScale,
-                          onSave: (name, label) =>
-                            setHistory((prev) => [
-                              ...prev,
-                              { label, key: name, ts: Date.now() },
-                            ]),
-                          onReset: resetSelection,
-                        })
-                      ),
-                      React.createElement(
-                        "div",
-                        { key: "chords-column", className: "chord-progression-card mx-auto", style: { maxWidth: "900px" } },
-                        React.createElement(ChordProgressions, {
-                          result,
-                          chosenKey,
-                          muted,
-                          playPc,
-                        })
-                      ),
-                    ]
-                  )
-                ),
+                    React.createElement(ChordProgressions, {
+                      result,
+                      chosenKey,
+                      muted,
+                      playPc,
+                    })
+                  );
+                })(),
 
                 /* History Log */
                 React.createElement(
