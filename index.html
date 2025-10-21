@@ -1761,7 +1761,7 @@
             const showTitle = totalKeys > 1 && !isRelativePairOnly;
 
             return React.createElement("div", {
-              className: "fade-in" + (isRelativePairOnly ? " flex flex-row justify-center items-center gap-2 w-full" : ""),
+              className: "fade-in w-full" + (isRelativePairOnly ? " flex flex-row justify-center items-center gap-2" : ""),
               style: isRelativePairOnly ? { paddingTop: "0", paddingBottom: "1rem" } : {}
             }, [
               showTitle && React.createElement(
