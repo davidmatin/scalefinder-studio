@@ -2034,14 +2034,48 @@
                   },
                   [
                     React.createElement(
-                      "p",
+                      "div",
                       {
-                        key: "title",
-                        className: "mb-4 text-[16px] font-bold tracking-tight text-zinc-100 text-center uppercase",
+                        key: "title-container",
+                        className: "flex items-center justify-between mb-4",
                       },
-                      `Chords in the Key of ${getKeyDisplayName(keyToShow.name)}`
+                      [
+                        React.createElement(
+                          "p",
+                          {
+                            key: "title",
+                            className: "text-[16px] font-bold tracking-tight text-zinc-100 uppercase flex-1 text-center",
+                          },
+                          `Chords in the Key of ${getKeyDisplayName(keyToShow.name)}`
+                        ),
+                        React.createElement(
+                          "button",
+                          {
+                            key: "minimize-btn",
+                            onClick: () => setShowChords(!showChords),
+                            className: "text-zinc-400 hover:text-zinc-100 transition-colors duration-200",
+                            title: showChords ? "Minimize" : "Expand",
+                          },
+                          React.createElement(
+                            "svg",
+                            {
+                              width: "20",
+                              height: "20",
+                              viewBox: "0 0 24 24",
+                              fill: "none",
+                              stroke: "currentColor",
+                              strokeWidth: "2",
+                              strokeLinecap: "round",
+                              strokeLinejoin: "round",
+                            },
+                            showChords
+                              ? React.createElement("path", { d: "M18 15l-6-6-6 6" })
+                              : React.createElement("path", { d: "M6 9l6 6 6-6" })
+                          )
+                        )
+                      ]
                     ),
-                    React.createElement(
+                    showChords && React.createElement(
                       "div",
                       {
                         key: "grid",
