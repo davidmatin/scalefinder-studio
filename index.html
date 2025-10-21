@@ -2457,8 +2457,8 @@
               // Clear selection immediately if conditions no longer match
               if (chosenKey) {
                 const keyExists = result.keys.find(k => k.name === chosenKey);
-                const shouldAutoSelect = (majorKeys.length === 1) || (majorKeys.length === 0 && minorKeys.length === 1);
-                
+                const shouldAutoSelect = (majorKeys.length === 1 && minorKeys.length === 1);
+
                 if (!keyExists || !shouldAutoSelect) {
                   setChosenKey("");
                   return; // Exit early to prevent auto-selection
@@ -2467,13 +2467,9 @@
               
               // Small delay before auto-selecting to smooth transitions
               const timeoutId = setTimeout(() => {
-                // Auto-select if there's exactly one major key and no key is chosen
-                if (majorKeys.length === 1 && !chosenKey) {
+                // Auto-select only when there's exactly one major and one minor key (relative pair)
+                if (majorKeys.length === 1 && minorKeys.length === 1 && !chosenKey) {
                   setChosenKey(majorKeys[0].name);
-                }
-                // Auto-select if there's exactly one minor key (and no major keys) and no key is chosen
-                else if (majorKeys.length === 0 && minorKeys.length === 1 && !chosenKey) {
-                  setChosenKey(minorKeys[0].name);
                 }
               }, 150); // 150ms delay for smooth transition
               
