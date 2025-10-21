@@ -1736,6 +1736,7 @@
           /* ---------- Components ---------- */
           function KeysReadout({
             result,
+            selected,
             onSelectKey,
             selectedKey,
             onApplyScale,
@@ -1790,10 +1791,37 @@
                 {
                   key: "title",
                   className:
-                    "mb-3 text-[18px] font-semibold tracking-tight text-zinc-100 uppercase text-left",
+                    "mb-2 text-[18px] font-semibold tracking-tight text-zinc-100 uppercase text-left",
                   style: { marginLeft: "0.75rem" }
                 },
                 "Detected Keys"
+              ),
+
+              showTitle && selected && selected.size > 0 && React.createElement(
+                "div",
+                {
+                  key: "selected-notes",
+                  className: "mb-3 text-left",
+                  style: { marginLeft: "0.75rem" }
+                },
+                [
+                  React.createElement(
+                    "span",
+                    {
+                      key: "label",
+                      className: "text-[12px] font-semibold text-zinc-400 uppercase"
+                    },
+                    "Selected Notes: "
+                  ),
+                  React.createElement(
+                    "span",
+                    {
+                      key: "notes",
+                      className: "text-[12px] font-normal text-zinc-300"
+                    },
+                    Array.from(selected).sort((a, b) => a - b).map(pc => PITCHES[pc].display).join(", ")
+                  )
+                ]
               ),
 
               groupedKeys.major.length > 0 &&
@@ -3080,6 +3108,7 @@
                   },
                   React.createElement(KeysReadout, {
                     result,
+                    selected,
                     onSelectKey: setChosenKey,
                     selectedKey: chosenKey,
                     onApplyScale: applyScale,
