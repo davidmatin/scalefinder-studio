@@ -1763,11 +1763,50 @@
               );
             }
             if (result.status === "none") {
-              return React.createElement(
-                "p",
-                { className: "text-zinc-400 text-center" },
-                "No matching keys found for that combination."
-              );
+              return React.createElement("div", {
+                className: "fade-in w-full"
+              }, [
+                React.createElement(
+                  "p",
+                  {
+                    key: "title",
+                    className: "mb-2 text-[18px] font-semibold tracking-tight text-zinc-100 uppercase text-left",
+                    style: { marginLeft: "0.75rem" }
+                  },
+                  "Detected Keys"
+                ),
+                selected && selected.size > 0 && React.createElement(
+                  "div",
+                  {
+                    key: "selected-notes",
+                    className: "mb-3 text-left",
+                    style: { marginLeft: "0.75rem" }
+                  },
+                  [
+                    React.createElement(
+                      "span",
+                      {
+                        key: "label",
+                        className: "text-[12px] font-semibold text-zinc-400 uppercase"
+                      },
+                      "Selected Notes: "
+                    ),
+                    React.createElement(
+                      "span",
+                      {
+                        key: "notes",
+                        className: "text-[12px] font-normal text-zinc-300"
+                      },
+                      Array.from(selected).sort((a, b) => a - b).map(pc => PITCHES[pc].display).join(", ")
+                    )
+                  ]
+                ),
+                React.createElement(
+                  "p",
+                  { key: "message", className: "text-zinc-400 text-center mt-4" },
+                  "No matching keys found for that combination."
+                )
+              ]);
             }
 
             const showRelativeIndicator =
