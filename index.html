@@ -300,10 +300,9 @@
         width: 28px;
         height: 28px;
         border-radius: 8px;
-        background: linear-gradient(135deg, rgba(20, 20, 25, 0.9), rgba(15, 15, 20, 0.9));
-        border: 1px solid rgba(255, 255, 255, 0.12);
-        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4),
-          inset 0 1px 0 rgba(255, 255, 255, 0.08);
+        background: transparent;
+        border: 1.5px solid rgba(161, 161, 170, 0.5);
+        box-shadow: none;
         transition: all 150ms ease;
         color: #d1d5db;
         cursor: pointer;
@@ -313,26 +312,25 @@
         height: 18px;
       }
       .mute-btn:hover {
-        background: linear-gradient(135deg, rgba(99, 102, 241, 0.15), rgba(20, 20, 25, 0.95));
-        border-color: rgba(99, 102, 241, 0.3);
-        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5),
-          inset 0 1px 0 rgba(255, 255, 255, 0.12);
-        transform: translateY(-1px);
+        background: rgba(255, 255, 255, 0.05);
+        border-color: rgba(255, 255, 255, 0.4);
+        box-shadow: none;
+        transform: translateY(0px);
         color: #f3f4f6;
       }
       .mute-btn:active {
         transform: translateY(0px);
       }
       .mute-btn.muted {
-        background: linear-gradient(135deg, #ef4444, #dc2626);
-        border-color: #b91c1c;
-        color: #fff;
-        box-shadow: 0 8px 20px rgba(239, 68, 68, 0.3),
-          inset 0 1px 0 rgba(255, 255, 255, 0.2);
+        background: rgba(239, 68, 68, 0.15);
+        border-color: #ef4444;
+        color: #ef4444;
+        box-shadow: none;
       }
       .mute-btn.muted:hover {
-        background: linear-gradient(135deg, #f87171, #ef4444);
-        transform: translateY(-1px);
+        background: rgba(239, 68, 68, 0.25);
+        border-color: #f87171;
+        transform: translateY(0px);
       }
       .mute-btn.active {
         background: linear-gradient(135deg, #6366f1, #4338ca);
@@ -2398,7 +2396,6 @@
               }
             });
             const [chosenKey, setChosenKey] = useState("");
-            const [showVolumeControl, setShowVolumeControl] = useState(false);
 
             // Update audio volume when masterVolume state changes
             useEffect(() => {
@@ -2442,30 +2439,7 @@
               };
             }, [hoverTimeout]);
 
-            // Hide volume control when clicking outside
-            useEffect(() => {
-              const handleClickOutside = (event) => {
-                // Check if click is on volume control elements
-                const volumeControl = event.target.closest('.volume-control');
-                const volumeButton = event.target.closest('[data-volume-btn]');
-                
-                // If click is not on volume-related elements, hide the control
-                if (!volumeControl && !volumeButton && showVolumeControl) {
-                  setShowVolumeControl(false);
-                }
-              };
-
-              if (showVolumeControl) {
-                document.addEventListener('click', handleClickOutside);
-                return () => {
-                  document.removeEventListener('click', handleClickOutside);
-                };
-              }
-            }, [showVolumeControl]);
-
             const handleShare = async () => {
-              // Hide volume control when clicking share
-              setShowVolumeControl(false);
               
               if (navigator.share) {
                 try {
@@ -2660,9 +2634,6 @@
             }
 
             const handleKey = (pc) => {
-              // Hide volume control when clicking piano keys
-              setShowVolumeControl(false);
-
               // Track piano click for freemium flow
               if (!clerk.user) {
                 setUsageStats(prev => {
@@ -2694,9 +2665,6 @@
             };
 
             const applyScale = (k) => {
-              // Hide volume control when clicking scale chips
-              setShowVolumeControl(false);
-
               const pcs = k.pcs;
               // Don't toggle off if already selected - just keep it selected and play sound
               if (setEquals(selected, pcs)) {
@@ -2714,9 +2682,6 @@
             };
 
             const resetSelection = () => {
-              // Hide volume control when clicking reset button
-              setShowVolumeControl(false);
-
               setFromPcs([]);
               setChosenKey("");
             };
@@ -2956,99 +2921,18 @@
                         keyWidth: keyW,
                       })
                     ),
-                    React.createElement(
-                      "button",
-                      {
-                        key: "mute-btn",
-                        className: "mute-btn " + (muted ? "muted" : ""),
-                        title: muted ? "Unmute" : "Mute",
-                        onClick: () => setMuted((v) => !v),
-                        "aria-pressed": muted,
-                        style: {
-                          top: 16 + "px",
-                          left: Math.round(keyW * 6.70) + "px", // Anchored to B white key (7th key)
-                        },
-                      },
-                      React.createElement(MuteIcon, { muted })
-                    ),
-                    // Volume button - positioned under mute button
-                    React.createElement(
-                      "button",
-                      {
-                        key: "volume-btn",
-                        className: "mute-btn" + (showVolumeControl ? " active" : ""),
-                        title: "Volume Control",
-                        onClick: () => setShowVolumeControl((v) => !v),
-                        "data-volume-btn": "true",
-                        style: {
-                          top: 50 + "px", // Positioned under the mute button
-                          left: Math.round(keyW * 6.70) + "px", // Anchored to B white key
-                        },
-                      },
-                      React.createElement(
-                        "svg",
-                        {
-                          viewBox: "0 0 24 24",
-                          fill: "none",
-                          stroke: "currentColor",
-                          strokeWidth: "2.5",
-                          width: "20",
-                          height: "20",
-                        },
-                        // Clean ascending equalizer bars
-                        React.createElement("line", {
-                          x1: "5", y1: "12", x2: "5", y2: "15",
-                          strokeLinecap: "round"
-                        }),
-                        React.createElement("line", {
-                          x1: "8", y1: "10", x2: "8", y2: "15",
-                          strokeLinecap: "round"
-                        }),
-                        React.createElement("line", {
-                          x1: "12", y1: "7", x2: "12", y2: "15",
-                          strokeLinecap: "round"
-                        }),
-                        React.createElement("line", {
-                          x1: "16", y1: "5", x2: "16", y2: "15",
-                          strokeLinecap: "round"
-                        }),
-                        React.createElement("line", {
-                          x1: "19", y1: "3", x2: "19", y2: "15",
-                          strokeLinecap: "round"
-                        }),
-                        // Minus symbol (left) - moved down more
-                        React.createElement("line", {
-                          x1: "3", y1: "20", x2: "7", y2: "20",
-                          strokeLinecap: "round",
-                          strokeWidth: "2"
-                        }),
-                        // Plus symbol (right) - moved down more
-                        React.createElement("line", {
-                          x1: "18", y1: "18", x2: "18", y2: "22",
-                          strokeLinecap: "round",
-                          strokeWidth: "2"
-                        }),
-                        React.createElement("line", {
-                          x1: "16", y1: "20", x2: "20", y2: "20",
-                          strokeLinecap: "round",
-                          strokeWidth: "2"
-                        })
-                      )
-                    ),
-                    // Volume control - positioned next to volume button
+                    // Volume control - positioned at top
                     React.createElement(
                       "div",
                       {
                         key: "volume-control",
-                        className: "volume-control " + (showVolumeControl ? "" : "opacity-0 pointer-events-none"),
+                        className: "volume-control",
                         style: {
-                          top: 50 + "px", // Same level as volume button
+                          top: 16 + "px",
                           right:
                             (isDesktop
-                              ? Math.round(50 + keyW / 20) // Positioned to the left of volume button
+                              ? Math.round(50 + keyW / 20)
                               : Math.round(36 + keyW * 0.18)) + "px",
-                          transition: "opacity 200ms ease, transform 200ms ease",
-                          transform: showVolumeControl ? "translateX(0)" : "translateX(10px)",
                         },
                       },
                       [
@@ -3075,6 +2959,25 @@
                           Math.round(masterVolume * 100) + "%"
                         ),
                       ]
+                    ),
+                    // Mute button - positioned to the right of volume control
+                    React.createElement(
+                      "button",
+                      {
+                        key: "mute-btn",
+                        className: "mute-btn " + (muted ? "muted" : ""),
+                        title: muted ? "Unmute" : "Mute",
+                        onClick: () => setMuted((v) => !v),
+                        "aria-pressed": muted,
+                        style: {
+                          top: 16 + "px",
+                          right:
+                            (isDesktop
+                              ? Math.round(38 + keyW / 20)
+                              : Math.round(24 + keyW * 0.18)) + "px",
+                        },
+                      },
+                      React.createElement(MuteIcon, { muted })
                     ),
                   ]
                 ),
