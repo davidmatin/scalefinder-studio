@@ -164,6 +164,27 @@ When editing:
 
 This solves the common UX issue where new users on iPhone with silent mode enabled hear no sound and abandon the site. The automatic detection ensures zero user friction.
 
+### Detected Keys Section Layout
+
+**Title and Label Alignment:**
+- "DETECTED KEYS" heading: Left-aligned with `text-left` class and `marginLeft: "0.75rem"` (line 1788-1789)
+- "MAJOR" and "MINOR" labels: Left-aligned via CSS `text-align: left` in `.scale-group-label` (line 529)
+- Section labels have `margin-left: 0.75rem` for consistent left indentation
+
+**Button Alignment:**
+- Key buttons (e.g., "C Major", "D Minor"): Center-aligned horizontally using `justify-center` class (line 1805, 1894)
+- Maintains centered appearance for button rows while keeping headings left-aligned
+
+**Container Alignment:**
+- Keys column uses `items-center` for vertical centering of button groups (line 3068)
+- Grid container uses `items-start` to prevent unwanted vertical centering when fewer keys displayed (line 3048)
+- Full width (`w-full`) on containers ensures proper title alignment regardless of content amount
+
+**Spacing Between Sections:**
+- `.scale-group` margins: `margin-top: 1rem`, `margin-bottom: 0.75rem` (line 474-475)
+- Balanced 12-20px vertical spacing between MAJOR and MINOR sections
+- First section uses `.no-separator` class to remove bottom padding/margin (line 495-498)
+
 ### Responsive Design
 
 Mobile breakpoints:
@@ -185,28 +206,31 @@ When only major/minor relative pair is displayed (`isRelativePairOnly` condition
 - Fixed `height: "165px"` for relative pairs (auto for multiple keys)
 - Provides consistent vertical spacing and prevents container expansion
 
-**Button Positioning (line 1779):**
+**Keys Column Vertical Centering (line 3068):**
+- Uses `items-center` for vertical centering of buttons within container
+- `marginTop: "-2px"` applied when relative pair to fine-tune vertical position
+- `justifyContent: "center"` for horizontal centering of relative pair buttons
+
+**Button Positioning (line 1780):**
 - `paddingTop: "0"` - Removes top padding for tighter layout
 - `paddingBottom: "1rem"` - Maintains bottom spacing
 - `paddingLeft: "1.5rem"` - Shifts buttons right to center them within their container
+- Full width (`w-full`) ensures proper left-alignment of section titles
 
 **X Button Vertical Alignment:**
-- Major button X (line 1853): `marginTop: "-35px"` - Moves X up relative to button
-- Minor button X (line 1952): `marginTop: "-15px"` - Less negative margin due to subtitle presence
+- Major button X (line 1854): `marginTop: "-35px"` - Moves X up relative to button
+- Minor button X (line 1955): `marginTop: "-25px"` - Adjusted for tighter subtitle spacing
 - Ensures both X buttons align at same vertical position despite different button structures
 
-**Subtitle Spacing (line 1904):**
+**Subtitle Spacing (line 1907):**
 - Button wrapper uses `gap-0` (no gap between button and subtitle)
-- "relative minor" text appears immediately below button for compact layout
+- Minor button wrapper: `marginTop: "0.5rem"` for tighter vertical spacing
+- "relative minor" text uses `height: "auto"` and `marginTop: "0.25rem"` for closer positioning to button
 
 **Button Height Matching:**
 - Major button (line 1838): 30px invisible placeholder (`visibility: hidden`) maintains vertical space
-- Minor button (line 1937): 30px visible subtitle with flex centering for "relative minor" text
-- Equal heights ensure X buttons can align using marginTop adjustments
-
-**Minor Button Vertical Adjustment (line 1904):**
-- `marginTop: "1rem"` shifts entire minor button wrapper down
-- Compensates for structural differences to align with major button
+- Minor button (line 1940): Auto height with `marginTop: "0.25rem"` for tight spacing
+- Balanced spacing ensures clean visual alignment
 
 **Clerk User Button on Mobile (lines 768-783):**
 - Changed from centered-below-logo to upper-right corner via absolute positioning
@@ -262,7 +286,7 @@ Without these settings, sign-in/sign-out will redirect to Clerk's hosted page bu
 
 ```
 keyclick/
-├── index.html                      # Entire application (~2900+ lines)
+├── index.html                      # Entire application (~3200+ lines)
 ├── assets/
 │   └── samples/                    # Piano audio samples
 │       ├── C.mp3
@@ -281,6 +305,8 @@ keyclick/
 │   └── settings.local.json         # Claude Code permissions config
 ├── .gitignore
 ├── CLAUDE.md                       # This file
+├── CHANGELOG-2025-10-14.md         # UI alignment fixes and enhancements (Oct 14)
+├── CHANGELOG-2025-10-21.md         # Matching count, notes redesign, volume controls (Oct 21)
 └── audio-click-fix-plan.md         # Technical deep-dive: iOS audio click fix
 ```
 
