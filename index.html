@@ -300,9 +300,10 @@
         width: 28px;
         height: 28px;
         border-radius: 8px;
-        background: transparent;
-        border: 1.5px solid rgba(161, 161, 170, 0.5);
-        box-shadow: none;
+        background: linear-gradient(135deg, rgba(20, 20, 25, 0.9), rgba(15, 15, 20, 0.9));
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4),
+          inset 0 1px 0 rgba(255, 255, 255, 0.08);
         transition: all 150ms ease;
         color: #d1d5db;
         cursor: pointer;
@@ -312,25 +313,26 @@
         height: 18px;
       }
       .mute-btn:hover {
-        background: rgba(255, 255, 255, 0.05);
-        border-color: rgba(255, 255, 255, 0.4);
-        box-shadow: none;
-        transform: translateY(0px);
+        background: linear-gradient(135deg, rgba(99, 102, 241, 0.15), rgba(20, 20, 25, 0.95));
+        border-color: rgba(99, 102, 241, 0.3);
+        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5),
+          inset 0 1px 0 rgba(255, 255, 255, 0.12);
+        transform: translateY(-1px);
         color: #f3f4f6;
       }
       .mute-btn:active {
         transform: translateY(0px);
       }
       .mute-btn.muted {
-        background: rgba(239, 68, 68, 0.15);
-        border-color: #ef4444;
-        color: #ef4444;
-        box-shadow: none;
+        background: linear-gradient(135deg, #ef4444, #dc2626);
+        border-color: #b91c1c;
+        color: #fff;
+        box-shadow: 0 8px 20px rgba(239, 68, 68, 0.3),
+          inset 0 1px 0 rgba(255, 255, 255, 0.2);
       }
       .mute-btn.muted:hover {
-        background: rgba(239, 68, 68, 0.25);
-        border-color: #f87171;
-        transform: translateY(0px);
+        background: linear-gradient(135deg, #f87171, #ef4444);
+        transform: translateY(-1px);
       }
       .mute-btn.active {
         background: linear-gradient(135deg, #6366f1, #4338ca);
@@ -2957,7 +2959,7 @@
                         onClick: () => setShowVolumeControl((v) => !v),
                         "data-volume-btn": "true",
                         style: {
-                          top: 16 + "px",
+                          top: 18 + "px",
                           left: Math.round(keyW * 6.70) + "px",
                         },
                       },
