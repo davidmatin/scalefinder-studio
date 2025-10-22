@@ -1841,24 +1841,38 @@
                 {
                   key: "selected-notes",
                   className: "mb-3 text-left",
-                  style: { marginLeft: "0.75rem" }
+                  style: { marginLeft: "0.75rem", marginRight: "0.75rem" }
                 },
                 [
                   React.createElement(
-                    "span",
+                    "div",
                     {
                       key: "label",
-                      className: "text-[12px] font-semibold text-zinc-400 uppercase"
+                      className: "text-[11px] font-semibold text-zinc-400 uppercase mb-1.5"
                     },
-                    "Selected Notes: "
+                    "Selected Notes"
                   ),
                   React.createElement(
-                    "span",
+                    "div",
                     {
-                      key: "notes",
-                      className: "text-[12px] font-normal text-zinc-300"
+                      key: "notes-container",
+                      className: "flex flex-wrap gap-1.5"
                     },
-                    Array.from(selected).sort((a, b) => a - b).map(pc => PITCHES[pc].display).join(", ")
+                    Array.from(selected).sort((a, b) => a - b).map((pc, idx) =>
+                      React.createElement(
+                        "div",
+                        {
+                          key: idx,
+                          className: "px-2.5 py-1 rounded-full text-[11px] font-medium",
+                          style: {
+                            background: "rgba(99, 102, 241, 0.15)",
+                            border: "1px solid rgba(99, 102, 241, 0.3)",
+                            color: "#a5b4fc"
+                          }
+                        },
+                        PITCHES[pc].display
+                      )
+                    )
                   )
                 ]
               ),
