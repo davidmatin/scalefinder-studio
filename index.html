@@ -1828,21 +1828,12 @@
               showTitle && React.createElement(
                 "p",
                 {
-                  key: "count",
-                  className: "mb-1 text-[13px] font-medium text-zinc-400 text-left",
-                  style: { marginLeft: "0.75rem" }
-                },
-                result.keys.length === 1 ? "1 Matching Key" : result.keys.length + " Matching Keys"
-              ),
-              showTitle && React.createElement(
-                "p",
-                {
                   key: "title",
                   className:
                     "mb-2 text-[18px] font-semibold tracking-tight text-zinc-100 uppercase text-left",
                   style: { marginLeft: "0.75rem" }
                 },
-                "Detected Keys"
+                result.keys.length + " Detected Keys"
               ),
 
               showTitle && selected && selected.size > 0 && React.createElement(
