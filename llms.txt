@@ -1,0 +1,54 @@
+# Scale Finder Studio
+
+> Interactive piano-based music theory tool that identifies possible musical keys and scales based on selected notes.
+
+## URL
+
+https://scalefinder.studio
+
+## What It Does
+
+Scale Finder Studio is a free web application for musicians, music students, and producers. Users click notes on an interactive piano keyboard, and the app instantly identifies all matching musical scales and keys. For each detected key, it displays the full diatonic chord progression with roman numeral analysis.
+
+## Key Features
+
+- Interactive piano keyboard with audio playback (real piano samples)
+- Scale and key detection from any combination of selected notes
+- Diatonic chord progressions for all detected keys (I, ii, iii, IV, V, vi, vii°)
+- Support for all 24 major and minor keys
+- Enharmonic spelling following Circle of Fifths conventions
+- Relative major/minor key pair highlighting
+- History of saved scale selections
+- Works on desktop and mobile (iOS silent switch bypass for audio)
+
+## How It Works
+
+1. Click notes on the piano keyboard to select them
+2. The app filters all 24 major and minor keys to find those containing every selected pitch class
+3. Matching keys are displayed as clickable buttons grouped by Major and Minor
+4. Clicking a key shows its full diatonic chord progression
+5. An "X" button resets the selection
+
+## Music Theory
+
+- Uses pitch class set theory for scale matching
+- Supports all 12 chromatic pitches with proper enharmonic equivalents
+- Sharp keys (right side of Circle of Fifths) display sharps
+- Flat keys (left side of Circle of Fifths) display flats
+- Chord progressions follow standard diatonic harmony (major: I ii iii IV V vi vii°, minor: i ii° III iv v VI VII)
+
+## Technology
+
+- Single-page web application (HTML, CSS, JavaScript)
+- React 18 for UI rendering
+- Web Audio API with real piano samples
+- Tailwind CSS for styling
+- No backend required (fully client-side)
+
+## Target Audience
+
+- Musicians learning music theory
+- Songwriters identifying keys from melodies
+- Piano students exploring scales and chords
+- Music producers finding chord progressions
+- Gospel and jazz musicians working with complex harmonies

@@ -4,4 +4,4 @@ compatibility_date = "2024-01-01"
 [[d1_databases]]
 binding = "DB"
 database_name = "scalefinder_analytics"
-database_id = "REPLACE_WITH_DATABASE_ID"
+database_id = "3f86c335-ebfb-4345-a47d-ea4d224327a4"
