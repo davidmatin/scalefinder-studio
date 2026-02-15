@@ -1,0 +1,7 @@
+name = "keyclick"
+compatibility_date = "2024-01-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "scalefinder_analytics"
+database_id = "REPLACE_WITH_DATABASE_ID"

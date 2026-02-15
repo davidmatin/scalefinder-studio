@@ -833,6 +833,9 @@
       data-clerk-publishable-key="pk_test_c3VwZXJiLWJyZWFtLTkzLmNsZXJrLmFjY291bnRzLmRldiQ"
       src="https://superb-bream-93.clerk.accounts.dev/npm/@clerk/clerk-js@latest/dist/clerk.browser.js"
     ></script>
+    <!-- Cloudflare Web Analytics -->
+    <script defer src='https://static.cloudflareinsights.com/beacon.min.js'
+            data-cf-beacon='{"token": "REPLACE_WITH_CWA_TOKEN"}'></script>
   </head>
   <body class="text-zinc-100">
     <div id="root" class="p-4 sm:p-6">
@@ -870,6 +873,55 @@
           // Clerk is auto-initialized via data-clerk-publishable-key
           await window.Clerk.load();
           const clerk = window.Clerk;
+
+          /* ---------- Analytics ---------- */
+          const _analyticsSessionId = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+            var r = (Math.random() * 16) | 0;
+            return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16);
+          });
+          var _eventQueue = [];
+          var _flushTimer = null;
+
+          function _flushEvents() {
+            if (_eventQueue.length === 0) return;
+            var batch = _eventQueue.splice(0);
+            if (_flushTimer) { clearTimeout(_flushTimer); _flushTimer = null; }
+            var userId = window.Clerk && window.Clerk.user ? window.Clerk.user.id : null;
+            batch.forEach(function (item) {
+              var payload = JSON.stringify({
+                event: item.event,
+                properties: Object.assign({}, item.properties, {
+                  session_id: _analyticsSessionId,
+                  user_id: userId
+                })
+              });
+              try {
+                if (navigator.sendBeacon) {
+                  navigator.sendBeacon('/api/track', new Blob([payload], { type: 'application/json' }));
+                } else {
+                  fetch('/api/track', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: payload,
+                    keepalive: true
+                  }).catch(function () {});
+                }
+              } catch (_) {}
+            });
+          }
+
+          function trackEvent(eventName, properties) {
+            _eventQueue.push({ event: eventName, properties: properties || {} });
+            if (_eventQueue.length >= 5) { _flushEvents(); return; }
+            if (!_flushTimer) {
+              _flushTimer = setTimeout(function () { _flushEvents(); _flushTimer = null; }, 5000);
+            }
+          }
+
+          document.addEventListener('visibilitychange', function () {
+            if (document.visibilityState === 'hidden') _flushEvents();
+          });
+          window.addEventListener('pagehide', function () { _flushEvents(); });
 
           const { useState, useMemo, useRef, useEffect, Fragment } = React;
 
@@ -2405,9 +2457,14 @@
               updateAudioVolume(masterVolume);
             }, [masterVolume, updateAudioVolume]);
 
+            const volumeTrackTimer = useRef(null);
             const handleVolumeChange = (e) => {
               const newVolume = parseFloat(e.target.value);
               setMasterVolume(newVolume);
+              if (volumeTrackTimer.current) clearTimeout(volumeTrackTimer.current);
+              volumeTrackTimer.current = setTimeout(function () {
+                trackEvent('volume_change', { volume: newVolume });
+              }, 500);
             };
 
             // Hover-to-play functionality with debounce
@@ -2688,6 +2745,7 @@
               
               toggle(pc);
               if (selecting) playPc(pc, muted);
+              trackEvent('piano_click', { pitch_class: pc, note_name: PITCHES[pc].display, action: selecting ? 'select' : 'deselect' });
             };
 
             const applyScale = (k) => {
@@ -2705,11 +2763,13 @@
                 if (!clerk.user) {
                   setUsageStats(prev => ({ ...prev, scaleChipClicks: prev.scaleChipClicks + 1 }));
                 }
+                trackEvent('scale_selected', { key_name: k.name, source: 'button' });
               }
             };
 
             const resetSelection = () => {
               setShowVolumeControl(false);
+              trackEvent('selection_reset', { previous_count: selected.size });
               setFromPcs([]);
               setChosenKey("");
             };
@@ -3033,7 +3093,7 @@
                             key: "speaker-icon",
                             className: "volume-speaker-btn",
                             title: "Mute",
-                            onClick: () => setMuted((v) => !v),
+                            onClick: () => setMuted((v) => { trackEvent('mute_toggle', { muted: !v }); return !v; }),
                             "aria-pressed": muted,
                             style: {
                               background: "transparent",
@@ -3195,6 +3255,7 @@
                           if (!clerk.user) {
                             setUsageStats(prev => ({ ...prev, dropdownSelections: prev.dropdownSelections + 1 }));
                           }
+                          trackEvent('scale_selected', { key_name: keyName, source: 'dropdown' });
                         }
                       },
                       className: "w-full py-2 px-3 bg-zinc-900/60 border border-zinc-700 rounded-lg text-zinc-200 focus:border-indigo-500 focus:outline-none text-xs font-medium"
@@ -3274,8 +3335,10 @@
                     onDelete: (i) =>
                       setHistory((prev) => prev.filter((_, idx) => idx !== i)),
                     onClear: () => {
-                      if (window.confirm("Clear all saved songs?"))
+                      if (window.confirm("Clear all saved songs?")) {
+                        trackEvent('history_cleared', { count: history.length });
                         setHistory([]);
+                      }
                     },
                   })
                 ),
