@@ -9,12 +9,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Architecture
 
 ### Technology Stack
-- **Single-file HTML application** - All code in `index.html` (~2900+ lines)
+- **Single-file HTML application** - All code in `index.html` (~3400+ lines)
 - **React 18** via CDN (UMD build, no build system)
 - **Tailwind CSS** via CDN
 - **Clerk Authentication** (Browser SDK) for user auth
 - **Hybrid Audio System** - Web Audio API (desktop/Android) + HTML5 Audio (iOS with silent switch bypass)
 - **Automatic platform detection** - iOS vs desktop/Android via user agent
+- **Cloudflare Pages Functions** - Serverless API endpoint for analytics
+- **Cloudflare D1** - SQLite database for custom event tracking
 - **No package.json** - This is intentionally a standalone HTML file
 
 ### Code Structure (within index.html)
@@ -273,12 +275,67 @@ In your Clerk Dashboard (https://dashboard.clerk.com), you must whitelist these 
 
 Without these settings, sign-in/sign-out will redirect to Clerk's hosted page but fail to return to your app.
 
+## Analytics
+
+### Cloudflare Web Analytics (Pageviews)
+- Auto-injected by Cloudflare Pages — no manual beacon script needed
+- Dashboard: Cloudflare Dashboard > Analytics & Logs > Web Analytics > scalefinder.studio
+- Tracks: pageviews, referrers, countries, devices, Core Web Vitals
+
+### Custom Event Tracking (D1 + Pages Functions)
+- **Endpoint**: `POST /api/track` — implemented in `functions/api/track.js`
+- **Database**: Cloudflare D1 `scalefinder_analytics` (ID: `3f86c335-ebfb-4345-a47d-ea4d224327a4`)
+- **Binding**: `DB` configured in Pages project settings and `wrangler.toml`
+- **Client-side**: `trackEvent(name, properties)` utility with batching (5 events or 5s flush interval)
+- **Transport**: `navigator.sendBeacon()` with `fetch({ keepalive: true })` fallback
+- **Session tracking**: UUID v4 generated per page load (`_analyticsSessionId`)
+- **Auto-flush**: On `visibilitychange` (hidden) and `pagehide` events
+
+#### Tracked Events
+| Event | Properties | Location |
+|-------|-----------|----------|
+| `piano_click` | `pitch_class`, `note_name`, `action` (select/deselect) | `handleKey()` |
+| `scale_selected` | `key_name`, `source` (button/dropdown) | `applyScale()`, dropdown onChange |
+| `mute_toggle` | `muted` (new state) | Speaker button onClick |
+| `volume_change` | `volume` (0.0–1.0, debounced 500ms) | `handleVolumeChange()` |
+| `selection_reset` | `previous_count` | `resetSelection()` |
+| `history_cleared` | `count` | `onClear` handler |
+
+#### Querying Analytics
+```bash
+# Via wrangler CLI
+npx wrangler d1 execute scalefinder_analytics --remote --command "SELECT * FROM analytics_events ORDER BY timestamp DESC LIMIT 20;"
+
+# Or via Cloudflare Dashboard > Workers & Pages > D1 > scalefinder_analytics > Console
+```
+
+## SEO & LLM Optimization
+
+### Meta Tags (in `<head>`)
+- **Canonical URL**: `<link rel="canonical" href="https://scalefinder.studio" />`
+- **Favicon**: SVG emoji favicon (🎹) via data URI
+- **Keywords**: scale finder, piano scales, music theory, key identifier, chord progressions, etc.
+- **Open Graph**: Full set (og:type, og:url, og:title, og:description, og:image with 1200x630 image)
+- **Twitter Card**: summary_large_image with title, description, and image
+- **JSON-LD**: WebApplication schema with features list, free pricing, MusicApplication category
+
+### Static SEO Files
+- **`robots.txt`**: Allows all crawlers, points to sitemap
+- **`sitemap.xml`**: Single-page sitemap with lastmod date
+- **`llms.txt`**: Structured description for LLM crawlers (features, how it works, audience)
+- **`_headers`**: Cloudflare Pages security headers (X-Content-Type-Options, X-Frame-Options, Referrer-Policy) + cache control for assets
+- **`assets/og-image.png`**: 1200x630 social share image (dark gradient with piano keys)
+
+### Noscript Fallback
+- `<noscript>` block provides crawlable HTML content for search engines that don't execute JavaScript
+- Contains app description, feature list, and "enable JavaScript" message
+
 ## Known Constraints
 
 - Single HTML file architecture is intentional (easy deployment, no build complexity)
 - No TypeScript (vanilla JS only)
 - No module system (everything in global scope within IIFE)
-- localStorage only (no database yet - user data not persisted to Clerk)
+- localStorage for user data (not persisted to Clerk); Cloudflare D1 for analytics only
 - Tailwind CSS must remain on CDN (no local build system)
 - No npm/package.json by design
 
@@ -286,8 +343,9 @@ Without these settings, sign-in/sign-out will redirect to Clerk's hosted page bu
 
 ```
 keyclick/
-├── index.html                      # Entire application (~3200+ lines)
+├── index.html                      # Entire application (~3400+ lines)
 ├── assets/
+│   ├── og-image.png                # 1200x630 social share image
 │   └── samples/                    # Piano audio samples
 │       ├── C.mp3
 │       ├── Cs.mp3                  # C# (sharp notation in filename)
@@ -301,6 +359,16 @@ keyclick/
 │       ├── A.mp3
 │       ├── As.mp3                  # A# / B♭
 │       └── B.mp3
+├── functions/
+│   └── api/
+│       └── track.js                # Pages Function: POST /api/track (analytics)
+├── migrations/
+│   └── 0001_create_analytics_events.sql  # D1 table schema
+├── wrangler.toml                   # D1 database binding config
+├── robots.txt                      # Search engine crawl directives
+├── sitemap.xml                     # Single-page sitemap
+├── llms.txt                        # LLM crawler guidance
+├── _headers                        # Cloudflare Pages security + cache headers
 ├── .claude/
 │   └── settings.local.json         # Claude Code permissions config
 ├── .gitignore
