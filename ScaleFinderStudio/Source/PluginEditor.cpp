@@ -1,5 +1,9 @@
 #include "PluginEditor.h"
 
+#if JucePlugin_Build_Standalone
+ #include <juce_audio_plugin_client/Standalone/juce_StandaloneFilterWindow.h>
+#endif
+
 static const char* whiteKeyNames[7] = { "c", "d", "e", "f", "g", "a", "b" };
 static const char* blackKeyNames[5] = { "c#", "e\xe2\x99\xad", "f#", "a\xe2\x99\xad", "b\xe2\x99\xad" };
 
@@ -152,35 +156,138 @@ void OptionsIconLookAndFeel::drawButtonText (juce::Graphics& g, juce::TextButton
                                                bool isHighlighted, bool)
 {
     auto bounds = button.getLocalBounds().toFloat().reduced (3.0f, 3.0f);
-    auto col = isHighlighted ? juce::Colour (0xff8B90A0) : juce::Colour (0xff4A4F62);
+    auto col = isActive       ? juce::Colour (0xff8b5cf6)
+             : isHighlighted  ? juce::Colour (0xff8B90A0)
+                              : juce::Colour (0xff4A4F62);
 
-    float lineThick = 1.5f;
-    float circleR = 2.5f;
-    float y1 = bounds.getY() + bounds.getHeight() * 0.18f;
+    // Three vertical dots — clean, minimal
+    float dotR = 2.0f;
+    float cx = bounds.getCentreX();
+    float y1 = bounds.getY() + bounds.getHeight() * 0.22f;
     float y2 = bounds.getCentreY();
-    float y3 = bounds.getY() + bounds.getHeight() * 0.82f;
+    float y3 = bounds.getY() + bounds.getHeight() * 0.78f;
 
-    struct SliderLine { float y; float knobPos; };
-    SliderLine lines[] = { { y1, 0.62f }, { y2, 0.30f }, { y3, 0.72f } };
+    g.setColour (col);
+    g.fillEllipse (cx - dotR, y1 - dotR, dotR * 2.0f, dotR * 2.0f);
+    g.fillEllipse (cx - dotR, y2 - dotR, dotR * 2.0f, dotR * 2.0f);
+    g.fillEllipse (cx - dotR, y3 - dotR, dotR * 2.0f, dotR * 2.0f);
+}
 
-    for (auto& sl : lines)
+// ── Keyboard toggle icon LookAndFeel ──────────────────────────────────────
+
+void KeyboardIconLookAndFeel::drawButtonBackground (juce::Graphics&, juce::Button&,
+                                                      const juce::Colour&, bool, bool) {}
+
+void KeyboardIconLookAndFeel::drawButtonText (juce::Graphics& g, juce::TextButton& button,
+                                                bool isHighlighted, bool)
+{
+    auto bounds = button.getLocalBounds().toFloat().reduced (3.0f, 3.0f);
+
+    juce::Colour col;
+    if (isEnabled)
+        col = isHighlighted ? juce::Colour (0xffa78bfa) : juce::Colour (0xff8b5cf6);
+    else
+        col = isHighlighted ? juce::Colour (0xff8B90A0) : juce::Colour (0xff4A4F62);
+
+    float cellSize = bounds.getWidth() * 0.22f;
+    float gap = (bounds.getWidth() - cellSize * 3.0f) / 2.0f;
+    float radius = 1.5f;
+
+    for (int row = 0; row < 3; ++row)
     {
-        g.setColour (col);
-        g.fillRoundedRectangle (bounds.getX(), sl.y - lineThick / 2.0f,
-                                bounds.getWidth(), lineThick, lineThick / 2.0f);
-
-        float cx = bounds.getX() + bounds.getWidth() * sl.knobPos;
-
-        // Punch out line behind circle
-        g.setColour (bgColour);
-        g.fillEllipse (cx - circleR - 1.0f, sl.y - circleR - 1.0f,
-                       (circleR + 1.0f) * 2.0f, (circleR + 1.0f) * 2.0f);
-
-        // Circle outline
-        g.setColour (col);
-        g.drawEllipse (cx - circleR, sl.y - circleR,
-                       circleR * 2.0f, circleR * 2.0f, 1.5f);
+        for (int col_idx = 0; col_idx < 3; ++col_idx)
+        {
+            float cx = bounds.getX() + col_idx * (cellSize + gap);
+            float cy = bounds.getY() + row * (cellSize + gap);
+            g.setColour (col);
+            g.fillRoundedRectangle (cx, cy, cellSize, cellSize, radius);
+        }
     }
+}
+
+// ── App-wide popup menu LookAndFeel ────────────────────────────────────────
+
+AppMenuLookAndFeel::AppMenuLookAndFeel()
+{
+    auto scheme = getDarkColourScheme();
+    scheme.setUIColour (ColourScheme::widgetBackground, juce::Colour (0xff0f0a1a));
+    scheme.setUIColour (ColourScheme::windowBackground, juce::Colour (0xff0f0a1a));
+    setColourScheme (scheme);
+
+    // Slightly transparent so MenuWindow becomes non-opaque (enables rounded corners)
+    setColour (juce::PopupMenu::backgroundColourId, juce::Colour (0xfe1a1a2e));
+    setColour (juce::PopupMenu::textColourId,       juce::Colour (0xffE8EAF0));
+    setColour (juce::PopupMenu::highlightedBackgroundColourId, juce::Colour (0xff222238));
+    setColour (juce::PopupMenu::highlightedTextColourId,       juce::Colour (0xffE8EAF0));
+    setColour (juce::PopupMenu::headerTextColourId,            juce::Colour (0xff8B90A0));
+
+    // Audio/MIDI Settings dialog theming
+    setColour (juce::ResizableWindow::backgroundColourId, juce::Colour (0xff1a1a2e));
+    setColour (juce::Label::textColourId,                 juce::Colour (0xffE8EAF0));
+    setColour (juce::Label::outlineColourId,              juce::Colour (0x00000000));
+    setColour (juce::TextButton::buttonColourId,          juce::Colour (0xff252540));
+    setColour (juce::TextButton::buttonOnColourId,        juce::Colour (0xff3730a3));
+    setColour (juce::TextButton::textColourOffId,         juce::Colour (0xffE8EAF0));
+    setColour (juce::TextButton::textColourOnId,          juce::Colour (0xffE8EAF0));
+    setColour (juce::ComboBox::backgroundColourId,        juce::Colour (0xff1C2030));
+    setColour (juce::ComboBox::textColourId,              juce::Colour (0xffE8EAF0));
+    setColour (juce::ComboBox::outlineColourId,           juce::Colour (0x14ffffff));
+    setColour (juce::ComboBox::arrowColourId,             juce::Colour (0xff8B90A0));
+    setColour (juce::ListBox::backgroundColourId,         juce::Colour (0xff1C2030));
+    setColour (juce::ListBox::textColourId,               juce::Colour (0xffE8EAF0));
+    setColour (juce::ToggleButton::textColourId,          juce::Colour (0xffE8EAF0));
+    setColour (juce::ToggleButton::tickColourId,          juce::Colour (0xff8b5cf6));
+    setColour (juce::TextEditor::backgroundColourId,      juce::Colour (0xff1C2030));
+    setColour (juce::TextEditor::textColourId,            juce::Colour (0xffE8EAF0));
+    setColour (juce::TextEditor::outlineColourId,         juce::Colour (0x14ffffff));
+    setColour (juce::Slider::backgroundColourId,          juce::Colour (0xff1C2030));
+    setColour (juce::Slider::thumbColourId,               juce::Colour (0xff8b5cf6));
+    setColour (juce::Slider::trackColourId,               juce::Colour (0xff6366f1));
+}
+
+void AppMenuLookAndFeel::drawPopupMenuBackground (juce::Graphics& g, int width, int height)
+{
+    auto bounds = juce::Rectangle<float> (0.0f, 0.0f, (float) width, (float) height);
+
+    g.setColour (juce::Colour (0xfe1a1a2e));
+    g.fillRoundedRectangle (bounds, 6.0f);
+
+    g.setColour (juce::Colour (0x14ffffff));
+    g.drawRoundedRectangle (bounds.reduced (0.5f), 6.0f, 1.0f);
+}
+
+void AppMenuLookAndFeel::drawPopupMenuItem (juce::Graphics& g, const juce::Rectangle<int>& area,
+                                             bool isSeparator, bool isActive, bool isHighlighted,
+                                             bool /*isTicked*/, bool /*hasSubMenu*/,
+                                             const juce::String& text, const juce::String& /*shortcutKeyText*/,
+                                             const juce::Drawable* /*icon*/, const juce::Colour* /*textColourToUse*/)
+{
+    if (isSeparator)
+    {
+        auto sepArea = area.reduced (8, 0).withSizeKeepingCentre (area.getWidth() - 16, 1);
+        g.setColour (juce::Colour (0x14ffffff));
+        g.fillRect (sepArea);
+        return;
+    }
+
+    auto r = area.reduced (4, 1);
+
+    if (isHighlighted && isActive)
+    {
+        g.setColour (juce::Colour (0xff222238));
+        g.fillRoundedRectangle (r.toFloat(), 4.0f);
+        g.setColour (juce::Colour (0xff8b5cf6));
+        g.drawRoundedRectangle (r.toFloat().reduced (0.5f), 4.0f, 1.0f);
+    }
+
+    g.setColour (isActive ? juce::Colour (0xffE8EAF0) : juce::Colour (0xff4A4F62));
+    g.setFont (juce::FontOptions (14.0f));
+    g.drawText (text, r.reduced (10, 0), juce::Justification::centredLeft);
+}
+
+int AppMenuLookAndFeel::getPopupMenuBorderSizeWithOptions (const juce::PopupMenu::Options&)
+{
+    return 6;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -713,9 +820,9 @@ void ScaleResultsPanel::paint (juce::Graphics& g)
                                     3.0f, cardRect.getHeight(), 2.0f);
         }
 
-        // Hairline border
+        // Border — purple on hover/selected, subtle white otherwise
         juce::Colour borderCol = isSelected ? juce::Colour (0x306366f1)
-                               : isHovered  ? juce::Colour (0x20ffffff)
+                               : isHovered  ? juce::Colour (0xff6366f1)
                                             : juce::Colour (0x14ffffff);
         g.setColour (borderCol);
         g.drawRoundedRectangle (cardRect.reduced (0.5f), 6.0f, 1.0f);
@@ -1043,6 +1150,10 @@ ScaleFinderEditor::ScaleFinderEditor (ScaleFinderProcessor& p)
 ScaleFinderEditor::~ScaleFinderEditor()
 {
     stopTimer();
+
+    if (previousDefaultLF != nullptr)
+        juce::LookAndFeel::setDefaultLookAndFeel (previousDefaultLF);
+
     pianoKeyboard.removeMouseListener (this);
     resultsViewport.removeMouseListener (this);
     resetButton.removeMouseListener (this);
@@ -1052,6 +1163,24 @@ ScaleFinderEditor::~ScaleFinderEditor()
 
     if (auto* window = dynamic_cast<juce::DocumentWindow*> (getTopLevelComponent()))
     {
+        window->removeKeyListener (this);
+
+        if (optionsButtonReplacement != nullptr)
+        {
+            optionsButtonReplacement->setLookAndFeel (nullptr);
+            static_cast<juce::Component*> (window)->removeChildComponent (optionsButtonReplacement);
+            delete optionsButtonReplacement;
+            optionsButtonReplacement = nullptr;
+        }
+
+        if (keyboardToggleButton != nullptr)
+        {
+            keyboardToggleButton->setLookAndFeel (nullptr);
+            static_cast<juce::Component*> (window)->removeChildComponent (keyboardToggleButton);
+            delete keyboardToggleButton;
+            keyboardToggleButton = nullptr;
+        }
+
         for (int i = 0; i < window->getNumChildComponents(); ++i)
             if (auto* btn = dynamic_cast<juce::TextButton*> (window->getChildComponent (i)))
                 btn->setLookAndFeel (nullptr);
@@ -1062,6 +1191,13 @@ void ScaleFinderEditor::parentHierarchyChanged()
 {
     if (auto* window = dynamic_cast<juce::DocumentWindow*> (getTopLevelComponent()))
     {
+        // Set app-wide menu LookAndFeel (once, standalone only)
+        if (previousDefaultLF == nullptr)
+        {
+            previousDefaultLF = &juce::LookAndFeel::getDefaultLookAndFeel();
+            juce::LookAndFeel::setDefaultLookAndFeel (&appMenuLF);
+        }
+
         window->setName (" ");
         window->setBackgroundColour (bgTop);
 
@@ -1120,14 +1256,87 @@ void ScaleFinderEditor::parentHierarchyChanged()
             }
         }
 
-        // Style the Options button as a slider icon
+        // Hide the original Options TextButton (its listener shows a poorly-positioned popup)
         for (int i = 0; i < window->getNumChildComponents(); ++i)
         {
             if (auto* btn = dynamic_cast<juce::TextButton*> (window->getChildComponent (i)))
             {
-                btn->setButtonText ("");
-                btn->setLookAndFeel (&optionsIconLF);
+                if (btn->getName() == "keyboardToggle" || btn->getName() == "optionsReplacement")
+                    continue;
+                btn->setVisible (false);
             }
+        }
+
+        // Create our own options button with properly-positioned popup (once)
+        if (optionsButtonReplacement == nullptr)
+        {
+            auto* btn = new juce::TextButton ("optionsReplacement");
+            btn->setButtonText ("");
+            btn->setLookAndFeel (&optionsIconLF);
+            btn->onClick = [this, btn]()
+            {
+                if (optionsMenuOpen)
+                    return;
+
+                optionsMenuOpen = true;
+                optionsIconLF.isActive = true;
+                btn->repaint();
+
+                juce::PopupMenu m;
+                m.addItem (1, TRANS ("Audio/MIDI Settings..."));
+                m.addSeparator();
+                m.addItem (2, TRANS ("Save current state..."));
+                m.addItem (3, TRANS ("Load a saved state..."));
+                m.addSeparator();
+                m.addItem (4, TRANS ("Reset to default state"));
+
+                auto opts = juce::PopupMenu::Options().withTargetComponent (btn);
+
+                m.showMenuAsync (opts, [this, btn] (int result)
+                {
+                    optionsMenuOpen = false;
+                    optionsIconLF.isActive = false;
+                    btn->repaint();
+
+                    if (result == 0) return;
+
+                   #if JucePlugin_Build_Standalone
+                    if (auto* sfw = dynamic_cast<juce::StandaloneFilterWindow*> (getTopLevelComponent()))
+                        sfw->handleMenuResult (result);
+                   #endif
+                });
+            };
+            static_cast<juce::Component*> (window)->addAndMakeVisible (btn);
+            optionsButtonReplacement = btn;
+        }
+
+        // Create computer keyboard toggle button (once)
+        if (keyboardToggleButton == nullptr)
+        {
+            auto* btn = new juce::TextButton ("keyboardToggle");
+            btn->setButtonText ("");
+            btn->setLookAndFeel (&keyboardIconLF);
+            btn->onClick = [this]()
+            {
+                computerKeyboardEnabled = ! computerKeyboardEnabled;
+                keyboardIconLF.isEnabled = computerKeyboardEnabled;
+
+                if (! computerKeyboardEnabled)
+                {
+                    // Release all held keyboard notes
+                    for (int note : pressedKeyboardNotes)
+                        processorRef.triggerNoteOff (note);
+                    pressedKeyboardNotes.clear();
+                }
+
+                if (keyboardToggleButton != nullptr)
+                    keyboardToggleButton->repaint();
+            };
+            static_cast<juce::Component*> (window)->addAndMakeVisible (btn);
+            keyboardToggleButton = btn;
+
+            // Register as KeyListener on the window
+            window->addKeyListener (this);
         }
     }
 }
@@ -1406,7 +1615,6 @@ void ScaleFinderEditor::paintOverChildren (juce::Graphics& g)
         }
     };
 
-    drawFocusRing (pianoKeyboard, 12.0f);
     drawFocusRing (resultsViewport, 8.0f);
     drawFocusRing (keyDropdown, 4.0f);
 }
@@ -1526,11 +1734,11 @@ void ScaleFinderEditor::timerCallback()
             auto* child = window->getChildComponent (i);
             if (auto* tb = dynamic_cast<juce::TextButton*> (child))
             {
-                // Options button → right side, square icon
-                int btnSize = tbH - 6;
-                int targetX = window->getWidth() - btnSize - 6;
-                if (tb->getX() != targetX || tb->getWidth() != btnSize)
-                    tb->setBounds (targetX, (tbH - btnSize) / 2, btnSize, btnSize);
+                // Skip our custom buttons (positioned separately below)
+                if (tb->getName() == "keyboardToggle" || tb->getName() == "optionsReplacement")
+                    continue;
+                // Original options button — keep hidden
+                tb->setVisible (false);
             }
             else if (auto* purp = dynamic_cast<PurpleWindowButton*> (child))
             {
@@ -1554,6 +1762,21 @@ void ScaleFinderEditor::timerCallback()
         if (minimiseBtn != nullptr)
         {
             minimiseBtn->setBounds (leftX, btnY, btnW, btnW);
+        }
+
+        // Position our custom title bar buttons: options (right), keyboard toggle (left of options)
+        {
+            int btnSize = tbH - 6;
+            int optionsX = window->getWidth() - btnSize - 6;
+
+            if (optionsButtonReplacement != nullptr)
+                optionsButtonReplacement->setBounds (optionsX, (tbH - btnSize) / 2, btnSize, btnSize);
+
+            if (keyboardToggleButton != nullptr)
+            {
+                int kbX = optionsX - btnSize - 4;
+                keyboardToggleButton->setBounds (kbX, (tbH - btnSize) / 2, btnSize, btnSize);
+            }
         }
     }
 }
@@ -1757,5 +1980,104 @@ void ScaleFinderEditor::filesDropped (const juce::StringArray& files, int, int)
     repaint();
 
     audioAnalyzer.analyzeFile (audioFile, processorRef.getAnalysisSampleRate());
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Computer Keyboard MIDI
+// ═══════════════════════════════════════════════════════════════════════════
+
+static int getKeyboardMidiNote (int keyCode)
+{
+    // Ableton-style: bottom row = white keys, top row = black keys
+    switch (keyCode)
+    {
+        case 'A': return 60;  // C4
+        case 'W': return 61;  // C#4
+        case 'S': return 62;  // D4
+        case 'E': return 63;  // D#4
+        case 'D': return 64;  // E4
+        case 'F': return 65;  // F4
+        case 'T': return 66;  // F#4
+        case 'G': return 67;  // G4
+        case 'Y': return 68;  // G#4
+        case 'H': return 69;  // A4
+        case 'U': return 70;  // A#4
+        case 'J': return 71;  // B4
+        case 'K': return 72;  // C5
+        default:  return -1;
+    }
+}
+
+bool ScaleFinderEditor::keyPressed (const juce::KeyPress& key, juce::Component*)
+{
+    if (! computerKeyboardEnabled)
+        return false;
+
+    int midiNote = getKeyboardMidiNote (key.getKeyCode());
+    if (midiNote < 0)
+        return false;
+
+    // Consume auto-repeat — note already held
+    if (pressedKeyboardNotes.count (midiNote))
+        return true;
+
+    pressedKeyboardNotes.insert (midiNote);
+
+    int pc = midiNote % 12;
+    bool isCurrentlySelected = processorRef.getAccumulatedNotes().count (pc) > 0;
+
+    if (isCurrentlySelected)
+        processorRef.togglePitchClassOff (pc);
+    else
+        processorRef.togglePitchClassOn (pc);
+
+    processorRef.triggerNoteOn (midiNote, 0.8f);
+    return true;
+}
+
+bool ScaleFinderEditor::keyStateChanged (bool /*isKeyDown*/, juce::Component*)
+{
+    if (! computerKeyboardEnabled)
+        return false;
+
+    bool consumed = false;
+    std::vector<int> released;
+
+    for (int note : pressedKeyboardNotes)
+    {
+        // Map MIDI note back to key code to check if still held
+        int keyCode = 0;
+        switch (note)
+        {
+            case 60: keyCode = 'A'; break;
+            case 61: keyCode = 'W'; break;
+            case 62: keyCode = 'S'; break;
+            case 63: keyCode = 'E'; break;
+            case 64: keyCode = 'D'; break;
+            case 65: keyCode = 'F'; break;
+            case 66: keyCode = 'T'; break;
+            case 67: keyCode = 'G'; break;
+            case 68: keyCode = 'Y'; break;
+            case 69: keyCode = 'H'; break;
+            case 70: keyCode = 'U'; break;
+            case 71: keyCode = 'J'; break;
+            case 72: keyCode = 'K'; break;
+            default: break;
+        }
+
+        if (keyCode != 0 && ! juce::KeyPress::isKeyCurrentlyDown (keyCode))
+        {
+            released.push_back (note);
+            consumed = true;
+        }
+    }
+
+    for (int note : released)
+    {
+        pressedKeyboardNotes.erase (note);
+        processorRef.triggerNoteOff (note);
+    }
+
+    return consumed;
 }
 

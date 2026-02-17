@@ -103,6 +103,31 @@ class OptionsIconLookAndFeel : public juce::LookAndFeel_V4
 {
 public:
     juce::Colour bgColour { 0xff0f0a1a };
+    bool isActive = false;
+    void drawButtonBackground (juce::Graphics&, juce::Button&,
+                               const juce::Colour&, bool, bool) override;
+    void drawButtonText (juce::Graphics&, juce::TextButton&, bool, bool) override;
+};
+
+// ── App-wide LookAndFeel for popup menus ────────────────────────────────
+class AppMenuLookAndFeel : public juce::LookAndFeel_V4
+{
+public:
+    AppMenuLookAndFeel();
+    void drawPopupMenuBackground (juce::Graphics&, int, int) override;
+    void drawPopupMenuItem (juce::Graphics&, const juce::Rectangle<int>&,
+                            bool, bool, bool, bool, bool,
+                            const juce::String&, const juce::String&,
+                            const juce::Drawable*, const juce::Colour*) override;
+    int getPopupMenuBorderSizeWithOptions (const juce::PopupMenu::Options&) override;
+};
+
+// ── Keyboard toggle button LookAndFeel: draws 3x3 grid icon ────────────
+class KeyboardIconLookAndFeel : public juce::LookAndFeel_V4
+{
+public:
+    juce::Colour bgColour { 0xff0f0a1a };
+    bool isEnabled = false;
     void drawButtonBackground (juce::Graphics&, juce::Button&,
                                const juce::Colour&, bool, bool) override;
     void drawButtonText (juce::Graphics&, juce::TextButton&, bool, bool) override;
@@ -154,6 +179,7 @@ private:
 
 class ScaleFinderEditor : public juce::AudioProcessorEditor,
                           public juce::FileDragAndDropTarget,
+                          public juce::KeyListener,
                           private juce::Timer
 {
 public:
@@ -171,6 +197,10 @@ public:
     void fileDragExit (const juce::StringArray& files) override;
     void filesDropped (const juce::StringArray& files, int x, int y) override;
     void parentHierarchyChanged() override;
+
+    // KeyListener
+    bool keyPressed (const juce::KeyPress& key, juce::Component*) override;
+    bool keyStateChanged (bool isKeyDown, juce::Component*) override;
 
 private:
     void timerCallback() override;
@@ -222,8 +252,20 @@ private:
     // ── Title bar styling ─────────────────────────────────────────────────
     TitleBarLookAndFeel titleBarLF;
     OptionsIconLookAndFeel optionsIconLF;
+    KeyboardIconLookAndFeel keyboardIconLF;
+    AppMenuLookAndFeel appMenuLF;
+    juce::LookAndFeel* previousDefaultLF = nullptr;
     DropdownButtonLookAndFeel dropdownLF;
     ResetButtonLookAndFeel resetButtonLF;
+
+    // ── Computer keyboard MIDI toggle ────────────────────────────────────
+    juce::TextButton* keyboardToggleButton = nullptr;
+    bool computerKeyboardEnabled = false;
+    std::set<int> pressedKeyboardNotes;
+
+    // ── Options button replacement (owns popup, properly positioned) ─────
+    juce::TextButton* optionsButtonReplacement = nullptr;
+    bool optionsMenuOpen = false;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ScaleFinderEditor)
 };
