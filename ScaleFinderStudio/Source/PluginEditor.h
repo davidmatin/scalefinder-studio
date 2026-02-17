@@ -177,6 +177,66 @@ private:
     void buildCells();
 };
 
+// ── Theme: centralized color palette ─────────────────────────────────
+struct Theme
+{
+    // Text hierarchy
+    static juce::Colour textPrimary()   { return juce::Colour (0xffE8EAF0); }
+    static juce::Colour textSecondary() { return juce::Colour (0xff8B90A0); }
+    static juce::Colour textMuted()     { return juce::Colour (0xff4A4F62); }
+
+    // Accent / brand
+    static juce::Colour accent()        { return juce::Colour (0xff6366f1); }
+    static juce::Colour accentPurple()  { return juce::Colour (0xff8b5cf6); }
+
+    // Surfaces
+    static juce::Colour bgTop()         { return juce::Colour (0xff0f0a1a); }
+    static juce::Colour bgBottom()      { return juce::Colour (0xff1a1a2e); }
+    static juce::Colour cardBg()        { return juce::Colour (0xff1C2030); }
+    static juce::Colour cardSelected()  { return juce::Colour (0xff252540); }
+    static juce::Colour borderSubtle()  { return juce::Colour (0xff252836); }
+    static juce::Colour borderFaint()   { return juce::Colour (0x14ffffff); }
+    static juce::Colour borderVFaint()  { return juce::Colour (0x0affffff); }
+    static juce::Colour borderGhost()   { return juce::Colour (0x0fffffff); }
+};
+
+// ── Chords / status display (leaf component, paint only) ─────────────
+class ChordsDisplay : public juce::Component
+{
+public:
+    ChordsDisplay() = default;
+    void paint (juce::Graphics&) override;
+
+    void setChords (const std::vector<ChordInfo>& chords, const juce::String& keyName);
+    void setStatus (const juce::String& status, const juce::String& resultStatus);
+    void clear();
+
+    // Layout values set by the editor before repaint
+    int viewportBottom = 0;     // Y of results viewport bottom edge
+    int altKeyY = 0;            // Y position of alt key button
+    int altKeyH = 0;            // Height of alt key button
+    bool altKeysVisible = false;
+
+private:
+    std::vector<ChordInfo> chordList;
+    juce::String keyName;
+    juce::String statusText;
+    juce::String resultStatus;   // "all-visible", "none", "all", "some"
+
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ChordsDisplay)
+};
+
+// ── Drag-drop overlay (leaf component, paint only) ───────────────────
+class DragOverlay : public juce::Component
+{
+public:
+    DragOverlay() = default;
+    void paint (juce::Graphics&) override;
+
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DragOverlay)
+};
+
+// ── Main editor ──────────────────────────────────────────────────────
 class ScaleFinderEditor : public juce::AudioProcessorEditor,
                           public juce::FileDragAndDropTarget,
                           public juce::KeyListener,
@@ -223,6 +283,10 @@ private:
     juce::Viewport resultsViewport;
     ScaleResultsPanel resultsPanel;
 
+    // ── Chord / status display (extracted from paint) ─────────────────
+    ChordsDisplay chordsDisplay;
+    DragOverlay dragOverlay;
+
     // ── Audio file analysis ─────────────────────────────────────────────
     AudioAnalyzer audioAnalyzer;
     bool isDragOver = false;
@@ -232,22 +296,6 @@ private:
     std::vector<AudioAnalyzer::AlternativeKey> currentAlternatives;
     juce::TextButton altKeyButton1, altKeyButton2;
     void applyAlternativeKey (int index);
-
-    // ── Text hierarchy (3 tiers) ───────────────────────────────────────
-    const juce::Colour textPrimary   { 0xffE8EAF0 };  // ~93% lightness
-    const juce::Colour textSecondary { 0xff8B90A0 };  // ~60% lightness
-    const juce::Colour textMuted     { 0xff4A4F62 };  // ~35% lightness
-
-    // ── Accent / brand ──────────────────────────────────────────────────
-    const juce::Colour accentColour  { 0xff6366f1 };
-    const juce::Colour accentPurple  { 0xff8b5cf6 };
-
-    // ── Surfaces ────────────────────────────────────────────────────────
-    const juce::Colour bgTop         { 0xff0f0a1a };
-    const juce::Colour bgBottom      { 0xff1a1a2e };
-    const juce::Colour cardBg        { 0xff1C2030 };
-    const juce::Colour cardBgSelected{ 0xff252540 };
-    const juce::Colour borderSubtle  { 0xff252836 };
 
     // ── Title bar styling ─────────────────────────────────────────────────
     TitleBarLookAndFeel titleBarLF;
@@ -266,6 +314,11 @@ private:
     // ── Options button replacement (owns popup, properly positioned) ─────
     juce::TextButton* optionsButtonReplacement = nullptr;
     bool optionsMenuOpen = false;
+
+    // ── Cached title bar button pointers (avoids iterating children at 30Hz) ──
+    juce::Button* cachedCloseBtn = nullptr;
+    juce::Button* cachedMinimiseBtn = nullptr;
+    bool titleBarButtonsCached = false;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ScaleFinderEditor)
 };
