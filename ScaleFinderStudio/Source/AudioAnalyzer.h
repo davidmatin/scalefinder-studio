@@ -22,8 +22,8 @@ public:
     int fftSize = 8192;                  // FFT size (must be power of 2)
     float amplitudeThreshold = 0.02f;    // RMS threshold to skip silence
     float minCorrelation = 0.3f;         // Minimum Pearson r to accept key detection
-    float minFreqHz = 80.0f;            // Ignore frequencies below this
-    float maxFreqHz = 5000.0f;           // Ignore frequencies above this
+    float minFreqHz = 65.0f;            // Ignore frequencies below this (C2)
+    float maxFreqHz = 2100.0f;           // Ignore frequencies above this (per Korzeniowski 2017)
 
 private:
     void run() override;

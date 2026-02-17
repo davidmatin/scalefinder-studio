@@ -5,15 +5,15 @@
 #define M_PI 3.14159265358979323846
 #endif
 
-// ── Temperley key profiles (from "Music and Probability", 2007) ──────────
-// Derived from real music corpus analysis; better at distinguishing relative
-// major/minor pairs than the original Krumhansl (1990) lab-experiment profiles.
+// ── Albrecht & Shanahan (2013) key profiles ──────────────────────────────
+// Derived from large corpus analysis of real music. Best empirical accuracy
+// in benchmarks; significantly better than Krumhansl (1990) and Temperley (1999).
 // Profile index 0 = tonic, rotated for each root note.
 static const double KEY_PROFILE_MAJOR[12] = {
-    5.0, 2.0, 3.5, 2.0, 4.5, 4.0, 2.0, 4.5, 2.0, 3.5, 1.5, 4.0
+    0.238, 0.006, 0.111, 0.006, 0.137, 0.094, 0.016, 0.214, 0.009, 0.080, 0.008, 0.081
 };
 static const double KEY_PROFILE_MINOR[12] = {
-    5.0, 2.0, 3.5, 4.5, 2.0, 4.0, 2.0, 4.5, 3.5, 2.0, 1.5, 4.0
+    0.220, 0.006, 0.104, 0.123, 0.019, 0.103, 0.012, 0.214, 0.062, 0.022, 0.061, 0.052
 };
 
 // Scale intervals for building pitch class sets from detected key
@@ -160,7 +160,7 @@ void AudioAnalyzer::run()
 
     if (threadShouldExit()) return;
 
-    // ── 5. Chromagram computation via FFT ────────────────────────────────
+    // ── 5. Chromagram via semitone filterbank ───────────────────────────
     audiofft::AudioFFT fft;
     fft.init ((size_t) fftSize);
 
@@ -182,8 +182,37 @@ void AudioAnalyzer::run()
     int maxBin = (int) std::floor ((double) maxFreqHz * fftSize / targetSampleRate);
     maxBin = juce::jmin (maxBin, (int) complexSize - 1);
 
-    // Pre-compute magnitudes buffer for harmonic attenuation lookback
+    // Pre-compute magnitudes buffer
     std::vector<float> magnitudes (complexSize, 0.0f);
+
+    // ── Pre-compute semitone filterbank ──
+    // For each MIDI note (C1=24 to B7=107), find the FFT bin range
+    // covering ±0.5 semitones around the note's center frequency.
+    // All octaves fold into 12 pitch classes.
+    // Semitone filterbank: for each MIDI note, store the FFT bin range
+    // covering ±0.5 semitones. All octaves fold into 12 pitch classes.
+    struct ChromaBand { int lowBin; int highBin; int pitchClass; };
+    std::vector<ChromaBand> filterbank;
+
+    for (int midi = 24; midi <= 107; ++midi)
+    {
+        double centerFreq = 440.0 * std::pow (2.0, (double) (midi - 69) / 12.0);
+        double lowFreq  = centerFreq * std::pow (2.0, -1.0 / 24.0);
+        double highFreq = centerFreq * std::pow (2.0,  1.0 / 24.0);
+
+        int lo = (int) std::ceil  (lowFreq  * (double) fftSize / targetSampleRate);
+        int hi = (int) std::floor (highFreq * (double) fftSize / targetSampleRate);
+
+        if (hi < minBin || lo > maxBin) continue;
+        lo = juce::jmax (lo, minBin);
+        hi = juce::jmin (hi, maxBin);
+
+        if (lo <= hi)
+            filterbank.push_back ({ lo, hi, midi % 12 });
+    }
+
+    DBG ("AudioAnalyzer: Filterbank has " + juce::String ((int) filterbank.size())
+         + " bands across " + juce::String (minFreqHz, 0) + "-" + juce::String (maxFreqHz, 0) + " Hz");
 
     for (int pos = 0; pos + fftSize <= analysisSampleCount; pos += hopSize)
     {
@@ -207,7 +236,7 @@ void AudioAnalyzer::run()
         // Compute FFT
         fft.fft (windowedBuf.data(), re.data(), im.data());
 
-        // Pre-compute all bin magnitudes (needed for harmonic attenuation lookback)
+        // Pre-compute all bin magnitudes
         for (int bin = 0; bin < (int) complexSize; ++bin)
             magnitudes[(size_t) bin] = std::sqrt (re[(size_t) bin] * re[(size_t) bin]
                                                 + im[(size_t) bin] * im[(size_t) bin]);
@@ -233,30 +262,39 @@ void AudioAnalyzer::run()
             }
         }
 
-        // ── Accumulate into per-frame chroma with harmonic attenuation + log magnitude ──
+        // ── Peak-picked filterbank chromagram (HPCP-style) ──
+        // Only accumulate spectral peaks (local maxima) into pitch classes.
+        // This focuses on tonal content and removes broadband energy that
+        // can bias the chromagram toward non-tonic pitch classes.
         double frameChroma[12] = {};
 
-        for (int bin = minBin; bin <= maxBin; ++bin)
+        for (const auto& band : filterbank)
         {
-            float magnitude = magnitudes[(size_t) bin];
-
-            // Harmonic attenuation: if the octave-below bin is louder,
-            // this bin is likely an overtone — reduce its contribution
-            int fundBin = bin / 2;
-            if (fundBin >= minBin)
+            double peakSum = 0.0;
+            for (int bin = band.lowBin; bin <= band.highBin; ++bin)
             {
-                float fundMag = magnitudes[(size_t) fundBin];
-                if (fundMag > magnitude * 0.5f)
-                    magnitude *= 0.3f;
+                float mag = magnitudes[(size_t) bin];
+                // Only count this bin if it's a local maximum (spectral peak)
+                bool isPeak = (bin > 0 && bin < (int) complexSize - 1
+                               && mag > magnitudes[(size_t) (bin - 1)]
+                               && mag >= magnitudes[(size_t) (bin + 1)]);
+                if (isPeak)
+                {
+                    // Weight by prominence: how much peak rises above neighbors.
+                    // Fundamentals have sharp peaks; harmonics are broader/weaker.
+                    double prominence = (double) mag
+                        - juce::jmax ((double) magnitudes[(size_t) (bin - 1)],
+                                      (double) magnitudes[(size_t) (bin + 1)]);
+                    peakSum += (double) mag * prominence;
+                }
             }
-
-            float freq = (float) bin * (float) targetSampleRate / (float) fftSize;
-            int midiNote = (int) std::round (69.0 + 12.0 * std::log2 ((double) freq / 440.0));
-            int pc = ((midiNote % 12) + 12) % 12;
-
-            // Log-magnitude: compress dynamic range, prevent loud partials from dominating
-            frameChroma[pc] += std::log1p ((double) magnitude);
+            frameChroma[band.pitchClass] += peakSum;
         }
+
+        // Log compression — reduces dynamic range so loud partials
+        // don't dominate the pitch class distribution
+        for (int i = 0; i < 12; ++i)
+            frameChroma[i] = std::log1p (frameChroma[i]);
 
         // ── Per-frame L2 normalization ──
         // Every frame contributes equally regardless of volume

@@ -1100,7 +1100,7 @@ void ScaleFinderEditor::parentHierarchyChanged()
                 replacement->setBounds (old->getBounds());
                 replacement->onClick = [old]() { old->triggerClick(); };
                 old->setVisible (false);
-                window->addAndMakeVisible (replacement);
+                static_cast<juce::Component*> (window)->addAndMakeVisible (replacement);
             }
         }
 
