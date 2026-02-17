@@ -5,14 +5,15 @@
 #define M_PI 3.14159265358979323846
 #endif
 
-// ── Krumhansl key profiles (from "Cognitive Foundations of Musical Pitch") ──
-// These represent the perceptual weight of each pitch class in major/minor keys.
+// ── Temperley key profiles (from "Music and Probability", 2007) ──────────
+// Derived from real music corpus analysis; better at distinguishing relative
+// major/minor pairs than the original Krumhansl (1990) lab-experiment profiles.
 // Profile index 0 = tonic, rotated for each root note.
-static const double KRUMHANSL_MAJOR[12] = {
-    6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88
+static const double KEY_PROFILE_MAJOR[12] = {
+    5.0, 2.0, 3.5, 2.0, 4.5, 4.0, 2.0, 4.5, 2.0, 3.5, 1.5, 4.0
 };
-static const double KRUMHANSL_MINOR[12] = {
-    6.33, 2.68, 3.52, 5.38, 2.60, 3.53, 2.54, 4.75, 3.98, 2.69, 3.34, 3.17
+static const double KEY_PROFILE_MINOR[12] = {
+    5.0, 2.0, 3.5, 4.5, 2.0, 4.0, 2.0, 4.5, 3.5, 2.0, 1.5, 4.0
 };
 
 // Scale intervals for building pitch class sets from detected key
@@ -181,6 +182,9 @@ void AudioAnalyzer::run()
     int maxBin = (int) std::floor ((double) maxFreqHz * fftSize / targetSampleRate);
     maxBin = juce::jmin (maxBin, (int) complexSize - 1);
 
+    // Pre-compute magnitudes buffer for harmonic attenuation lookback
+    std::vector<float> magnitudes (complexSize, 0.0f);
+
     for (int pos = 0; pos + fftSize <= analysisSampleCount; pos += hopSize)
     {
         if (threadShouldExit()) return;
@@ -203,17 +207,68 @@ void AudioAnalyzer::run()
         // Compute FFT
         fft.fft (windowedBuf.data(), re.data(), im.data());
 
-        // Map FFT bins to pitch classes and accumulate magnitude
+        // Pre-compute all bin magnitudes (needed for harmonic attenuation lookback)
+        for (int bin = 0; bin < (int) complexSize; ++bin)
+            magnitudes[(size_t) bin] = std::sqrt (re[(size_t) bin] * re[(size_t) bin]
+                                                + im[(size_t) bin] * im[(size_t) bin]);
+
+        // ── Percussive frame filtering via spectral flatness ──
+        // High flatness = energy spread evenly = noise/percussion → skip
+        {
+            double logSum = 0.0, linSum = 0.0;
+            int flatCount = 0;
+            for (int bin = minBin; bin <= maxBin; ++bin)
+            {
+                float mag = magnitudes[(size_t) bin];
+                if (mag > 0.0f) { logSum += std::log ((double) mag); flatCount++; }
+                linSum += (double) mag;
+            }
+            if (flatCount > 0)
+            {
+                double geoMean = std::exp (logSum / flatCount);
+                double ariMean = linSum / flatCount;
+                double flatness = (ariMean > 0.0) ? geoMean / ariMean : 0.0;
+                if (flatness > 0.8)
+                    continue;  // skip percussive/noisy frame
+            }
+        }
+
+        // ── Accumulate into per-frame chroma with harmonic attenuation + log magnitude ──
+        double frameChroma[12] = {};
+
         for (int bin = minBin; bin <= maxBin; ++bin)
         {
-            float magnitude = std::sqrt (re[(size_t) bin] * re[(size_t) bin]
-                                       + im[(size_t) bin] * im[(size_t) bin]);
+            float magnitude = magnitudes[(size_t) bin];
+
+            // Harmonic attenuation: if the octave-below bin is louder,
+            // this bin is likely an overtone — reduce its contribution
+            int fundBin = bin / 2;
+            if (fundBin >= minBin)
+            {
+                float fundMag = magnitudes[(size_t) fundBin];
+                if (fundMag > magnitude * 0.5f)
+                    magnitude *= 0.3f;
+            }
 
             float freq = (float) bin * (float) targetSampleRate / (float) fftSize;
             int midiNote = (int) std::round (69.0 + 12.0 * std::log2 ((double) freq / 440.0));
             int pc = ((midiNote % 12) + 12) % 12;
 
-            chroma[pc] += (double) magnitude;
+            // Log-magnitude: compress dynamic range, prevent loud partials from dominating
+            frameChroma[pc] += std::log1p ((double) magnitude);
+        }
+
+        // ── Per-frame L2 normalization ──
+        // Every frame contributes equally regardless of volume
+        double norm = 0.0;
+        for (int i = 0; i < 12; ++i)
+            norm += frameChroma[i] * frameChroma[i];
+        norm = std::sqrt (norm);
+
+        if (norm > 0.0)
+        {
+            for (int i = 0; i < 12; ++i)
+                chroma[i] += frameChroma[i] / norm;
         }
     }
 
@@ -232,8 +287,8 @@ void AudioAnalyzer::run()
         double rotatedMajor[12], rotatedMinor[12];
         for (int i = 0; i < 12; ++i)
         {
-            rotatedMajor[(i + root) % 12] = KRUMHANSL_MAJOR[i];
-            rotatedMinor[(i + root) % 12] = KRUMHANSL_MINOR[i];
+            rotatedMajor[(i + root) % 12] = KEY_PROFILE_MAJOR[i];
+            rotatedMinor[(i + root) % 12] = KEY_PROFILE_MINOR[i];
         }
 
         double corrMaj = pearsonCorrelation (chroma, rotatedMajor, 12);

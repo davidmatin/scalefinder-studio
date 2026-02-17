@@ -19,7 +19,7 @@ public:
     std::set<int> getDetectedPitchClasses() const;
 
     // Configurable settings
-    int fftSize = 4096;                  // FFT size (must be power of 2)
+    int fftSize = 8192;                  // FFT size (must be power of 2)
     float amplitudeThreshold = 0.02f;    // RMS threshold to skip silence
     float minCorrelation = 0.3f;         // Minimum Pearson r to accept key detection
     float minFreqHz = 80.0f;            // Ignore frequencies below this
