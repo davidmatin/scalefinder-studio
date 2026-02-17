@@ -39,6 +39,7 @@ void AudioAnalyzer::analyzeFile (const juce::File& audioFile, double hostSampleR
     {
         const juce::ScopedLock sl (resultLock);
         detectedPitchClasses.clear();
+        alternativeKeys.clear();
     }
 
     startThread();
@@ -53,6 +54,12 @@ std::set<int> AudioAnalyzer::getDetectedPitchClasses() const
 {
     const juce::ScopedLock sl (resultLock);
     return detectedPitchClasses;
+}
+
+std::vector<AudioAnalyzer::AlternativeKey> AudioAnalyzer::getAlternativeKeys() const
+{
+    const juce::ScopedLock sl (resultLock);
+    return alternativeKeys;
 }
 
 int AudioAnalyzer::hzToMidi (float hz)
@@ -354,10 +361,43 @@ void AudioAnalyzer::run()
         DBG ("AudioAnalyzer: No confident key detection (best r=" + juce::String (bestCorr, 3) + ")");
     }
 
-    // ── 7. Store results ─────────────────────────────────────────────────
+    // ── 7. Compute alternative keys (Circle of Fifths neighbors) ────────
+    std::vector<AlternativeKey> alts;
+    if (bestCorr >= (double) minCorrelation)
+    {
+        // Alt 1: Subdominant (5th below = 5 semitones up from root)
+        // Catches: detected dominant instead of real tonic
+        int subRoot = (bestRoot + 5) % 12;
+        {
+            AlternativeKey alt;
+            const int* ints = bestIsMajor ? MAJOR_INTERVALS : MINOR_INTERVALS;
+            for (int i = 0; i < 7; ++i)
+                alt.pitchClasses.insert ((subRoot + ints[i]) % 12);
+            alt.name = juce::String (noteNames[subRoot]) + (bestIsMajor ? " Major" : " Minor");
+            alts.push_back (alt);
+        }
+
+        // Alt 2: Dominant (5th above = 7 semitones up from root)
+        // Catches: detected subdominant instead of real tonic
+        int domRoot = (bestRoot + 7) % 12;
+        {
+            AlternativeKey alt;
+            const int* ints = bestIsMajor ? MAJOR_INTERVALS : MINOR_INTERVALS;
+            for (int i = 0; i < 7; ++i)
+                alt.pitchClasses.insert ((domRoot + ints[i]) % 12);
+            alt.name = juce::String (noteNames[domRoot]) + (bestIsMajor ? " Major" : " Minor");
+            alts.push_back (alt);
+        }
+
+        DBG ("AudioAnalyzer: Alt 1 (subdominant): " + alts[0].name);
+        DBG ("AudioAnalyzer: Alt 2 (dominant): " + alts[1].name);
+    }
+
+    // ── 8. Store results ─────────────────────────────────────────────────
     {
         const juce::ScopedLock sl (resultLock);
         detectedPitchClasses = result;
+        alternativeKeys = alts;
     }
 
     DBG ("AudioAnalyzer: Detected " + juce::String ((int) result.size()) + " pitch classes from "

@@ -18,6 +18,13 @@ public:
     // Get results (call after isAnalysisComplete() returns true)
     std::set<int> getDetectedPitchClasses() const;
 
+    // Alternative key suggestions (Circle of Fifths neighbors)
+    struct AlternativeKey {
+        std::set<int> pitchClasses;
+        juce::String name;  // e.g. "B Major"
+    };
+    std::vector<AlternativeKey> getAlternativeKeys() const;
+
     // Configurable settings
     int fftSize = 8192;                  // FFT size (must be power of 2)
     float amplitudeThreshold = 0.02f;    // RMS threshold to skip silence
@@ -35,6 +42,7 @@ private:
     juce::File fileToAnalyze;
     double targetSampleRate = 44100.0;
     std::set<int> detectedPitchClasses;
+    std::vector<AlternativeKey> alternativeKeys;
     std::atomic<bool> analysisComplete { false };
     mutable juce::CriticalSection resultLock;
 };

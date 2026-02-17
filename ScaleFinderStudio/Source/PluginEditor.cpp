@@ -998,6 +998,9 @@ ScaleFinderEditor::ScaleFinderEditor (ScaleFinderProcessor& p)
         pianoKeyboard.clearSelection();
         keyDropdown.setButtonText ("select key...");
         dismissKeyGridPopup();
+        currentAlternatives.clear();
+        altKeyButton1.setVisible (false);
+        altKeyButton2.setVisible (false);
         updateUI();
     };
     addAndMakeVisible (resetButton);
@@ -1014,6 +1017,19 @@ ScaleFinderEditor::ScaleFinderEditor (ScaleFinderProcessor& p)
     resultsViewport.setScrollBarThickness (6);
     resultsViewport.getVerticalScrollBar().setColour (juce::ScrollBar::thumbColourId, juce::Colour (0x40ffffff));
     addAndMakeVisible (resultsViewport);
+
+    // ── Alternative key suggestion buttons ──────────────────────────────
+    auto setupAltButton = [this] (juce::TextButton& btn, int index) {
+        btn.setColour (juce::TextButton::buttonColourId, juce::Colour (0x00000000));
+        btn.setColour (juce::TextButton::buttonOnColourId, juce::Colour (0x00000000));
+        btn.setColour (juce::TextButton::textColourOffId, accentColour);
+        btn.setColour (juce::ComboBox::outlineColourId, juce::Colour (0x30ffffff));
+        btn.onClick = [this, index]() { applyAlternativeKey (index); };
+        btn.setVisible (false);
+        addAndMakeVisible (btn);
+    };
+    setupAltButton (altKeyButton1, 0);
+    setupAltButton (altKeyButton2, 1);
 
     // Listen for mouse clicks on children so we can dismiss the key grid popup
     pianoKeyboard.addMouseListener (this, false);
@@ -1234,6 +1250,16 @@ void ScaleFinderEditor::paint (juce::Graphics& g)
                     juce::Justification::centred);
     }
 
+    // ── "Also try:" label for alternative keys ─────────────────────────
+    if (altKeyButton1.isVisible() && ! isDragOver)
+    {
+        g.setColour (textSecondary);
+        g.setFont (juce::FontOptions (11.0f));
+        g.drawText ("Also try:",
+                    margin, altKeyButton1.getY(), 52, altKeyButton1.getHeight(),
+                    juce::Justification::centredLeft);
+    }
+
     // ── Drag overlay (on top of everything) ──────────────────────────────
     if (isDragOver)
     {
@@ -1416,10 +1442,23 @@ void ScaleFinderEditor::resized()
     int resultsY = controlsY + controlsH + 16;
     bool hasChordCard = processorRef.selectedKey.isNotEmpty() && ! processorRef.currentChords.empty();
     int chordCardH = hasChordCard ? 104 : 0;
-    int resultsH = getHeight() - resultsY - chordCardH - 8;
+    bool hasAlts = altKeyButton1.isVisible();
+    int altRowH = hasAlts ? 32 : 0;
+    int resultsH = getHeight() - resultsY - chordCardH - altRowH - 8;
     resultsViewport.setBounds (margin, resultsY, w - margin * 2, juce::jmax (resultsH, 60));
     resultsPanel.setSize (resultsViewport.getWidth() - (resultsViewport.isVerticalScrollBarShown() ? 6 : 0),
                           resultsPanel.getHeight());
+
+    // ── Alternative key buttons (below results) ──────────────────────
+    if (hasAlts)
+    {
+        int altY = resultsViewport.getBottom() + 4;
+        int labelW = 52;   // "Also try:" label width (drawn in paint)
+        int btnW = (w - margin * 2 - labelW - 8 - 8) / 2;  // two buttons, 8px gaps
+        int btnH = 24;
+        altKeyButton1.setBounds (margin + labelW + 8, altY + 4, btnW, btnH);
+        altKeyButton2.setBounds (margin + labelW + 8 + btnW + 8, altY + 4, btnW, btnH);
+    }
 }
 
 void ScaleFinderEditor::timerCallback()
@@ -1434,11 +1473,27 @@ void ScaleFinderEditor::timerCallback()
         if (! pitchClasses.empty())
         {
             processorRef.setAccumulatedNotes (pitchClasses);
+            currentAlternatives = audioAnalyzer.getAlternativeKeys();
             analysisStatusText = "";
+
+            // Update alt button labels
+            if (currentAlternatives.size() >= 1)
+            {
+                altKeyButton1.setButtonText (MusicTheory::getKeyDisplayName (currentAlternatives[0].name));
+                altKeyButton1.setVisible (true);
+            }
+            if (currentAlternatives.size() >= 2)
+            {
+                altKeyButton2.setButtonText (MusicTheory::getKeyDisplayName (currentAlternatives[1].name));
+                altKeyButton2.setVisible (true);
+            }
         }
         else
         {
             analysisStatusText = "No pitches detected";
+            currentAlternatives.clear();
+            altKeyButton1.setVisible (false);
+            altKeyButton2.setVisible (false);
         }
         updateUI();
     }
@@ -1544,6 +1599,19 @@ void ScaleFinderEditor::updateUI()
     updateChordsDisplay();
     resized();  // Recalculate layout (chord card space depends on selection)
     repaint();
+}
+
+void ScaleFinderEditor::applyAlternativeKey (int index)
+{
+    if (index < 0 || index >= (int) currentAlternatives.size()) return;
+
+    auto& alt = currentAlternatives[(size_t) index];
+    processorRef.setAccumulatedNotes (alt.pitchClasses);
+    currentAlternatives.clear();
+    altKeyButton1.setVisible (false);
+    altKeyButton2.setVisible (false);
+    analysisStatusText = "";
+    updateUI();
 }
 
 void ScaleFinderEditor::onKeyButtonClicked (const juce::String& keyName)

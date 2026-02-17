@@ -198,6 +198,11 @@ private:
     bool isDragOver = false;
     juce::String analysisStatusText;
 
+    // ── Alternative key suggestions ──────────────────────────────────────
+    std::vector<AudioAnalyzer::AlternativeKey> currentAlternatives;
+    juce::TextButton altKeyButton1, altKeyButton2;
+    void applyAlternativeKey (int index);
+
     // ── Text hierarchy (3 tiers) ───────────────────────────────────────
     const juce::Colour textPrimary   { 0xffE8EAF0 };  // ~93% lightness
     const juce::Colour textSecondary { 0xff8B90A0 };  // ~60% lightness
