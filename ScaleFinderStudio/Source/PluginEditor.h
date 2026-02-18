@@ -48,6 +48,7 @@ class ScaleResultsPanel : public juce::Component
 public:
     ScaleResultsPanel();
     void paint (juce::Graphics&) override;
+    void resized() override;
     void mouseDown (const juce::MouseEvent&) override;
     void mouseMove (const juce::MouseEvent&) override;
     void mouseExit (const juce::MouseEvent&) override;
@@ -59,26 +60,27 @@ public:
 
 private:
     int getCardAtPosition (juce::Point<float> pos) const;
+    void layoutChips (float availableWidth);
 
     struct CardEntry {
         KeyInfo key;
-        juce::String relativeKeyDisplay;
+        juce::String chipText;
+        juce::Rectangle<float> bounds;
         bool isExactMatch;
     };
     std::vector<CardEntry> cards;
     juce::String selectedKeyName;
 
-    struct CardRow {
-        int leftIdx;    // Major card index, or -1
-        int rightIdx;   // Minor card index, or -1
-    };
-    std::vector<CardRow> pairedRows;
-
     int hoveredCardIndex = -1;
+    int majorCount = 0;
+    float separatorY = 0.0f;
 
-    static constexpr float cardHeight = 40.0f;
-    static constexpr float cardGap = 8.0f;
-    static constexpr float colGap = 8.0f;
+    static constexpr float chipHeight = 28.0f;
+    static constexpr float chipGap = 4.0f;
+    static constexpr float chipPadX = 8.0f;
+    static constexpr float chipRadius = 14.0f;
+    static constexpr float chipFontSize = 14.0f;
+    static constexpr float separatorGap = 8.0f;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ScaleResultsPanel)
 };
@@ -120,6 +122,7 @@ public:
                             const juce::String&, const juce::String&,
                             const juce::Drawable*, const juce::Colour*) override;
     int getPopupMenuBorderSizeWithOptions (const juce::PopupMenu::Options&) override;
+    void drawTooltip (juce::Graphics&, const juce::String&, int, int) override;
 };
 
 // ── Keyboard toggle button LookAndFeel: draws 3x3 grid icon ────────────
@@ -127,7 +130,7 @@ class KeyboardIconLookAndFeel : public juce::LookAndFeel_V4
 {
 public:
     juce::Colour bgColour { 0xff0f0a1a };
-    bool isEnabled = false;
+    bool isEnabled = true;
     void drawButtonBackground (juce::Graphics&, juce::Button&,
                                const juce::Colour&, bool, bool) override;
     void drawButtonText (juce::Graphics&, juce::TextButton&, bool, bool) override;
@@ -148,6 +151,24 @@ class ResetButtonLookAndFeel : public juce::LookAndFeel_V4
 public:
     void drawButtonBackground (juce::Graphics&, juce::Button&,
                                const juce::Colour&, bool, bool) override;
+};
+
+// ── Browse icon button LookAndFeel: outline + folder icon ─────────
+class BrowseIconLookAndFeel : public juce::LookAndFeel_V4
+{
+public:
+    void drawButtonBackground (juce::Graphics&, juce::Button&,
+                               const juce::Colour&, bool, bool) override;
+    void drawButtonText (juce::Graphics&, juce::TextButton&, bool, bool) override;
+};
+
+// ── Invisible button LookAndFeel (no-op paint) ──────────────────────
+class InvisibleButtonLookAndFeel : public juce::LookAndFeel_V4
+{
+public:
+    void drawButtonBackground (juce::Graphics&, juce::Button&,
+                               const juce::Colour&, bool, bool) override {}
+    void drawButtonText (juce::Graphics&, juce::TextButton&, bool, bool) override {}
 };
 
 // ── Grid popup for key selection ──────────────────────────────────────
@@ -216,6 +237,7 @@ public:
     int altKeyY = 0;            // Y position of alt key button
     int altKeyH = 0;            // Height of alt key button
     bool altKeysVisible = false;
+    bool emptyStateHovered = false;
 
 private:
     std::vector<ChordInfo> chordList;
@@ -234,6 +256,33 @@ public:
     void paint (juce::Graphics&) override;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DragOverlay)
+};
+
+// ── Options popup (stays inside editor, like KeyGridPopup) ────────────
+class OptionsPopup : public juce::Component
+{
+public:
+    OptionsPopup();
+    void paint (juce::Graphics&) override;
+    void mouseDown (const juce::MouseEvent&) override;
+    void mouseMove (const juce::MouseEvent&) override;
+    void mouseExit (const juce::MouseEvent&) override;
+
+    std::function<void (int)> onItemSelected;
+
+private:
+    struct MenuItem {
+        juce::String text;
+        int itemId;
+        juce::Rectangle<float> bounds;
+    };
+    std::vector<MenuItem> items;
+    int hoveredIndex = -1;
+
+    int getItemAtPosition (juce::Point<float> pos) const;
+    void buildItems();
+
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (OptionsPopup)
 };
 
 // ── Main editor ──────────────────────────────────────────────────────
@@ -269,6 +318,9 @@ private:
     void updateChordsDisplay();
     void showKeyGridPopup();
     void dismissKeyGridPopup();
+    void showOptionsPopup();
+    void dismissOptionsPopup();
+    void openFileBrowser();
 
     ScaleFinderProcessor& processorRef;
 
@@ -277,6 +329,7 @@ private:
     juce::TextButton resetButton { "reset" };
     juce::TextButton keyDropdown { "select key..." };
     std::unique_ptr<KeyGridPopup> keyGridPopup;
+    std::unique_ptr<OptionsPopup> optionsPopup;
     juce::Label titleLabel1, titleLabel2;
 
     // ── Scale results ─────────────────────────────────────────────────
@@ -286,11 +339,15 @@ private:
     // ── Chord / status display (extracted from paint) ─────────────────
     ChordsDisplay chordsDisplay;
     DragOverlay dragOverlay;
+    juce::TooltipWindow tooltipWindow { this, 500 };
 
     // ── Audio file analysis ─────────────────────────────────────────────
     AudioAnalyzer audioAnalyzer;
     bool isDragOver = false;
     juce::String analysisStatusText;
+    juce::TextButton browseButton { "" };
+    juce::TextButton browseIconButton { "" };
+    std::unique_ptr<juce::FileChooser> fileChooser;
 
     // ── Alternative key suggestions ──────────────────────────────────────
     std::vector<AudioAnalyzer::AlternativeKey> currentAlternatives;
@@ -305,10 +362,12 @@ private:
     juce::LookAndFeel* previousDefaultLF = nullptr;
     DropdownButtonLookAndFeel dropdownLF;
     ResetButtonLookAndFeel resetButtonLF;
+    InvisibleButtonLookAndFeel invisibleButtonLF;
+    BrowseIconLookAndFeel browseIconLF;
 
     // ── Computer keyboard MIDI toggle ────────────────────────────────────
     juce::TextButton* keyboardToggleButton = nullptr;
-    bool computerKeyboardEnabled = false;
+    bool computerKeyboardEnabled = true;
     std::set<int> pressedKeyboardNotes;
 
     // ── Options button replacement (owns popup, properly positioned) ─────
@@ -319,6 +378,7 @@ private:
     juce::Button* cachedCloseBtn = nullptr;
     juce::Button* cachedMinimiseBtn = nullptr;
     bool titleBarButtonsCached = false;
+    bool windowSizeConfigured = false;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ScaleFinderEditor)
 };

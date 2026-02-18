@@ -109,12 +109,11 @@ void TitleBarLookAndFeel::positionDocumentWindowButtons (juce::DocumentWindow&,
 }
 
 void DropdownButtonLookAndFeel::drawButtonBackground (juce::Graphics& g, juce::Button& button,
-                                                        const juce::Colour&, bool isOver, bool isDown)
+                                                        const juce::Colour&, bool, bool)
 {
     auto bounds = button.getLocalBounds().toFloat().reduced (0.5f);
-    g.setColour (juce::Colour (0xff1a1a2e));
-    g.fillRoundedRectangle (bounds, 6.0f);
-    g.setColour (isOver ? juce::Colour (0xff6366f1) : juce::Colour (0x14ffffff));
+    auto outlineCol = button.findColour (juce::ComboBox::outlineColourId);
+    g.setColour (outlineCol);
     g.drawRoundedRectangle (bounds, 6.0f, 1.5f);
 }
 
@@ -122,9 +121,10 @@ void DropdownButtonLookAndFeel::drawButtonText (juce::Graphics& g, juce::TextBut
                                                   bool, bool)
 {
     auto bounds = button.getLocalBounds().toFloat();
+    auto textCol = button.findColour (juce::TextButton::textColourOffId);
 
     // Text (left-aligned with padding)
-    g.setColour (juce::Colour (0xff8B90A0));
+    g.setColour (textCol);
     g.setFont (juce::FontOptions (14.0f));
     g.drawText (button.getButtonText(), bounds.reduced (12.0f, 0.0f).withTrimmedRight (24.0f),
                 juce::Justification::centredLeft);
@@ -136,7 +136,7 @@ void DropdownButtonLookAndFeel::drawButtonText (juce::Graphics& g, juce::TextBut
     arrow.addTriangle (arrowX - 4.0f, arrowY - 2.0f,
                        arrowX + 4.0f, arrowY - 2.0f,
                        arrowX, arrowY + 3.0f);
-    g.setColour (juce::Colour (0xff8B90A0));
+    g.setColour (textCol);
     g.fillPath (arrow);
 }
 
@@ -147,6 +147,42 @@ void ResetButtonLookAndFeel::drawButtonBackground (juce::Graphics& g, juce::Butt
     auto outlineCol = button.findColour (juce::ComboBox::outlineColourId);
     g.setColour (outlineCol);
     g.drawRoundedRectangle (bounds, 6.0f, 1.5f);
+}
+
+void BrowseIconLookAndFeel::drawButtonBackground (juce::Graphics& g, juce::Button& button,
+                                                     const juce::Colour&, bool, bool)
+{
+    auto bounds = button.getLocalBounds().toFloat().reduced (0.5f);
+    auto outlineCol = button.findColour (juce::ComboBox::outlineColourId);
+    g.setColour (outlineCol);
+    g.drawRoundedRectangle (bounds, 6.0f, 1.5f);
+}
+
+void BrowseIconLookAndFeel::drawButtonText (juce::Graphics& g, juce::TextButton& button,
+                                              bool, bool)
+{
+    auto bounds = button.getLocalBounds().toFloat().reduced (7.0f, 7.0f);
+    auto outlineCol = button.findColour (juce::ComboBox::outlineColourId);
+    g.setColour (outlineCol);
+
+    float x = bounds.getX(), y = bounds.getY();
+    float w = bounds.getWidth(), h = bounds.getHeight();
+    float tabW = w * 0.4f, tabH = h * 0.2f, r = 1.5f;
+
+    juce::Path folder;
+    folder.startNewSubPath (x + r, y + h);
+    folder.quadraticTo (x, y + h, x, y + h - r);
+    folder.lineTo (x, y + tabH + r);
+    folder.quadraticTo (x, y, x + r, y);
+    folder.lineTo (x + tabW - r, y);
+    folder.quadraticTo (x + tabW, y, x + tabW, y + tabH);
+    folder.lineTo (x + w - r, y + tabH);
+    folder.quadraticTo (x + w, y + tabH, x + w, y + tabH + r);
+    folder.lineTo (x + w, y + h - r);
+    folder.quadraticTo (x + w, y + h, x + w - r, y + h);
+    folder.closeSubPath();
+
+    g.strokePath (folder, juce::PathStrokeType (1.3f));
 }
 
 void OptionsIconLookAndFeel::drawButtonBackground (juce::Graphics&, juce::Button&,
@@ -181,7 +217,7 @@ void KeyboardIconLookAndFeel::drawButtonBackground (juce::Graphics&, juce::Butto
 void KeyboardIconLookAndFeel::drawButtonText (juce::Graphics& g, juce::TextButton& button,
                                                 bool isHighlighted, bool)
 {
-    auto bounds = button.getLocalBounds().toFloat().reduced (3.0f, 3.0f);
+    auto bounds = button.getLocalBounds().toFloat().reduced (4.0f, 4.0f);
 
     juce::Colour col;
     if (isEnabled)
@@ -189,19 +225,42 @@ void KeyboardIconLookAndFeel::drawButtonText (juce::Graphics& g, juce::TextButto
     else
         col = isHighlighted ? juce::Colour (0xff8B90A0) : juce::Colour (0xff4A4F62);
 
-    float cellSize = bounds.getWidth() * 0.22f;
-    float gap = (bounds.getWidth() - cellSize * 3.0f) / 2.0f;
-    float radius = 1.5f;
+    // Square piano icon — 3 white keys + 2 black keys
+    float size = juce::jmin (bounds.getWidth(), bounds.getHeight());
+    float x0 = bounds.getCentreX() - size / 2.0f;
+    float y0 = bounds.getCentreY() - size / 2.0f;
+    float border = size * 0.1f;
 
-    for (int row = 0; row < 3; ++row)
+    // Outer border
+    g.setColour (col);
+    g.drawRect (x0, y0, size, size, border);
+
+    // Inner area (inside the border)
+    float ix = x0 + border;
+    float iy = y0 + border;
+    float iw = size - border * 2.0f;
+    float ih = size - border * 2.0f;
+
+    // 3 white keys with thin gaps
+    float gap = 0.5f;
+    float whiteKeyW = (iw - gap * 2.0f) / 3.0f;
+
+    for (int i = 0; i < 3; ++i)
     {
-        for (int col_idx = 0; col_idx < 3; ++col_idx)
-        {
-            float cx = bounds.getX() + col_idx * (cellSize + gap);
-            float cy = bounds.getY() + row * (cellSize + gap);
-            g.setColour (col);
-            g.fillRoundedRectangle (cx, cy, cellSize, cellSize, radius);
-        }
+        float kx = ix + i * (whiteKeyW + gap);
+        g.setColour (col);
+        g.drawRect (kx, iy, whiteKeyW, ih, 0.5f);
+    }
+
+    // 2 black keys (60% height, between white keys)
+    float blackH = ih * 0.55f;
+    float blackW = whiteKeyW * 0.55f;
+
+    for (int i = 0; i < 2; ++i)
+    {
+        float kx = ix + (i + 1) * (whiteKeyW + gap) - blackW / 2.0f;
+        g.setColour (col);
+        g.fillRect (kx, iy, blackW, blackH);
     }
 }
 
@@ -212,10 +271,11 @@ AppMenuLookAndFeel::AppMenuLookAndFeel()
     auto scheme = getDarkColourScheme();
     scheme.setUIColour (ColourScheme::widgetBackground, juce::Colour (0xff0f0a1a));
     scheme.setUIColour (ColourScheme::windowBackground, juce::Colour (0xff0f0a1a));
+    scheme.setUIColour (ColourScheme::outline, juce::Colour (0xff0f0a1a));
     setColourScheme (scheme);
 
     // Slightly transparent so MenuWindow becomes non-opaque (enables rounded corners)
-    setColour (juce::PopupMenu::backgroundColourId, juce::Colour (0xfe1a1a2e));
+    setColour (juce::PopupMenu::backgroundColourId, juce::Colour (0xf91a1a2e));
     setColour (juce::PopupMenu::textColourId,       juce::Colour (0xffE8EAF0));
     setColour (juce::PopupMenu::highlightedBackgroundColourId, juce::Colour (0xff222238));
     setColour (juce::PopupMenu::highlightedTextColourId,       juce::Colour (0xffE8EAF0));
@@ -249,7 +309,7 @@ void AppMenuLookAndFeel::drawPopupMenuBackground (juce::Graphics& g, int width, 
 {
     auto bounds = juce::Rectangle<float> (0.0f, 0.0f, (float) width, (float) height);
 
-    g.setColour (juce::Colour (0xfe1a1a2e));
+    g.setColour (juce::Colour (0xf91a1a2e));
     g.fillRoundedRectangle (bounds, 6.0f);
 
     g.setColour (juce::Colour (0x14ffffff));
@@ -288,6 +348,25 @@ void AppMenuLookAndFeel::drawPopupMenuItem (juce::Graphics& g, const juce::Recta
 int AppMenuLookAndFeel::getPopupMenuBorderSizeWithOptions (const juce::PopupMenu::Options&)
 {
     return 6;
+}
+
+void AppMenuLookAndFeel::drawTooltip (juce::Graphics& g, const juce::String& text,
+                                       int width, int height)
+{
+    auto bounds = juce::Rectangle<float> (0.0f, 0.0f, (float) width, (float) height);
+
+    // Fill entire rect first (covers native window corners)
+    g.fillAll (Theme::cardBg());
+
+    g.setColour (Theme::cardBg());
+    g.fillRoundedRectangle (bounds, 4.0f);
+
+    g.setColour (Theme::borderSubtle());
+    g.drawRoundedRectangle (bounds.reduced (0.5f), 4.0f, 1.0f);
+
+    g.setColour (Theme::textSecondary());
+    g.setFont (juce::FontOptions (13.0f));
+    g.drawText (text, bounds.reduced (6.0f, 3.0f), juce::Justification::centredLeft);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -597,6 +676,12 @@ void PianoKeyboard::paint (juce::Graphics& g)
         g.drawText (juce::String::fromUTF8 (blackKeyNames[i]),
                     labelArea, juce::Justification::centred);
     }
+
+    // Clean up corner anti-aliasing artifacts at rounded clip boundary
+    g.setColour (juce::Colour (0xff0f0a1a));
+    juce::Path borderPath;
+    borderPath.addRoundedRectangle (bounds, cornerRadius);
+    g.strokePath (borderPath, juce::PathStrokeType (2.0f));
 }
 
 int PianoKeyboard::getNoteAtPosition (juce::Point<float> pos) const
@@ -713,18 +798,20 @@ ScaleResultsPanel::ScaleResultsPanel()
 void ScaleResultsPanel::setResults (const std::vector<KeyInfo>& keys, int selectedNoteCount)
 {
     cards.clear();
-    pairedRows.clear();
+    majorCount = 0;
 
     for (auto& key : keys)
     {
         CardEntry entry;
         entry.key = key;
-
-        auto relKey = MusicTheory::getRelativeKey (key.name);
-        if (relKey.isNotEmpty())
-            entry.relativeKeyDisplay = MusicTheory::getKeyDisplayName (relKey);
-
         entry.isExactMatch = ((int) key.pitchClasses.size() == selectedNoteCount);
+
+        // Abbreviated chip text: "C Maj", "A min"
+        if (key.type == "Major")
+            entry.chipText = key.displayName.replace (" Major", " Maj");
+        else
+            entry.chipText = key.displayName.replace (" Minor", " min");
+
         cards.push_back (std::move (entry));
     }
 
@@ -739,40 +826,82 @@ void ScaleResultsPanel::setResults (const std::vector<KeyInfo>& keys, int select
             return a.key.root < b.key.root;
         });
 
-    // Build paired rows: Major (left) + relative Minor (right)
-    std::set<int> paired;
+    // Count Major keys for separator placement
+    majorCount = 0;
+    for (auto& c : cards)
+        if (c.key.type == "Major") ++majorCount;
 
-    for (int i = 0; i < (int) cards.size(); ++i)
-    {
-        if (paired.count (i)) continue;
-        if (cards[(size_t) i].key.type == "Major")
-        {
-            auto relName = MusicTheory::getRelativeKey (cards[(size_t) i].key.name);
-            int minorIdx = -1;
-            for (int j = 0; j < (int) cards.size(); ++j)
-            {
-                if (j != i && ! paired.count (j) && cards[(size_t) j].key.name == relName)
-                {
-                    minorIdx = j;
-                    break;
-                }
-            }
-            pairedRows.push_back ({ i, minorIdx });
-            paired.insert (i);
-            if (minorIdx >= 0) paired.insert (minorIdx);
-        }
-    }
-
-    // Any unpaired Minors go on the right
-    for (int i = 0; i < (int) cards.size(); ++i)
-    {
-        if (! paired.count (i))
-            pairedRows.push_back ({ -1, i });
-    }
-
-    int totalH = (int) (pairedRows.size() * (cardHeight + cardGap));
-    setSize (getWidth(), juce::jmax (totalH, 1));
+    layoutChips ((float) getWidth());
     repaint();
+}
+
+void ScaleResultsPanel::layoutChips (float availableWidth)
+{
+    if (cards.empty() || availableWidth <= 0.0f)
+    {
+        separatorY = 0.0f;
+        setSize ((int) availableWidth, 1);
+        return;
+    }
+
+    juce::Font font { juce::FontOptions (chipFontSize) };
+    float cursorX = 0.0f;
+    float cursorY = 4.0f;  // small top padding
+
+    // Layout Major chips
+    for (int i = 0; i < majorCount && i < (int) cards.size(); ++i)
+    {
+        float textW = font.getStringWidthFloat (cards[(size_t) i].chipText);
+        float chipW = textW + chipPadX * 2.0f;
+
+        if (cursorX + chipW > availableWidth && cursorX > 0.0f)
+        {
+            cursorX = 0.0f;
+            cursorY += chipHeight + chipGap;
+        }
+
+        cards[(size_t) i].bounds = { cursorX, cursorY, chipW, chipHeight };
+        cursorX += chipW + chipGap;
+    }
+
+    // Separator between Major and Minor groups
+    bool hasMinors = majorCount < (int) cards.size();
+    if (majorCount > 0 && hasMinors)
+    {
+        cursorY += chipHeight + separatorGap;
+        separatorY = cursorY;
+        cursorY += separatorGap;
+    }
+    else
+    {
+        separatorY = 0.0f;
+    }
+
+    // Layout Minor chips
+    cursorX = 0.0f;
+    for (int i = majorCount; i < (int) cards.size(); ++i)
+    {
+        float textW = font.getStringWidthFloat (cards[(size_t) i].chipText);
+        float chipW = textW + chipPadX * 2.0f;
+
+        if (cursorX + chipW > availableWidth && cursorX > 0.0f)
+        {
+            cursorX = 0.0f;
+            cursorY += chipHeight + chipGap;
+        }
+
+        cards[(size_t) i].bounds = { cursorX, cursorY, chipW, chipHeight };
+        cursorX += chipW + chipGap;
+    }
+
+    int totalH = (int) (cursorY + chipHeight + 4.0f);
+    setSize ((int) availableWidth, juce::jmax (totalH, 1));
+}
+
+void ScaleResultsPanel::resized()
+{
+    if (! cards.empty())
+        layoutChips ((float) getWidth());
 }
 
 void ScaleResultsPanel::setSelectedKey (const juce::String& keyName)
@@ -786,79 +915,52 @@ void ScaleResultsPanel::setSelectedKey (const juce::String& keyName)
 
 void ScaleResultsPanel::paint (juce::Graphics& g)
 {
-    float w = (float) getWidth();
-    float cw = (w - colGap) / 2.0f;
-
-    // Lambda to draw a single card at a given position
-    auto drawCard = [&] (int cardIdx, float x, float y)
+    // Separator line between Major and Minor groups
+    if (majorCount > 0 && majorCount < (int) cards.size() && separatorY > 0.0f)
     {
-        if (cardIdx < 0 || cardIdx >= (int) cards.size()) return;
+        g.setColour (Theme::borderSubtle());
+        g.drawLine (12.0f, separatorY, (float) getWidth() - 12.0f, separatorY, 1.0f);
+    }
 
-        auto& card = cards[(size_t) cardIdx];
-        auto cardRect = juce::Rectangle<float> (x, y, cw, cardHeight);
-
+    // Draw each chip
+    for (int i = 0; i < (int) cards.size(); ++i)
+    {
+        auto& card = cards[(size_t) i];
+        auto& r = card.bounds;
         bool isSelected = (card.key.name == selectedKeyName);
-        bool isHovered = (cardIdx == hoveredCardIndex);
+        bool isHovered = (i == hoveredCardIndex);
 
-        // Card background
-        juce::Colour bg = isSelected ? juce::Colour (0xff252540)
-                        : isHovered  ? juce::Colour (0xff222238)
-                                     : juce::Colour (0xff1C2030);
-        g.setColour (bg);
-        g.fillRoundedRectangle (cardRect, 6.0f);
-
-        // Subtle top highlight for depth
-        g.setColour (juce::Colour (isHovered ? 0x10ffffff : 0x08ffffff));
-        g.fillRect (cardRect.getX() + 8.0f, cardRect.getY() + 1.0f,
-                    cardRect.getWidth() - 16.0f, 1.0f);
-
-        // Left accent bar — selected only
+        // Chip background
         if (isSelected)
-        {
-            g.setColour (juce::Colour (0xff6366f1));
-            g.fillRoundedRectangle (cardRect.getX(), cardRect.getY(),
-                                    3.0f, cardRect.getHeight(), 2.0f);
-        }
+            g.setColour (Theme::accent().withAlpha (0.15f));
+        else if (isHovered)
+            g.setColour (juce::Colour (0xff222238));
+        else
+            g.setColour (Theme::cardBg());
+        g.fillRoundedRectangle (r, chipRadius);
 
-        // Border — purple on hover/selected, subtle white otherwise
-        juce::Colour borderCol = isSelected ? juce::Colour (0x306366f1)
-                               : isHovered  ? juce::Colour (0xff6366f1)
-                                            : juce::Colour (0x14ffffff);
-        g.setColour (borderCol);
-        g.drawRoundedRectangle (cardRect.reduced (0.5f), 6.0f, 1.0f);
+        // Chip border
+        if (isSelected)
+            g.setColour (Theme::accent());
+        else if (isHovered)
+            g.setColour (Theme::accent().withAlpha (0.6f));
+        else
+            g.setColour (Theme::borderFaint());
+        g.drawRoundedRectangle (r.reduced (0.5f), chipRadius, 1.0f);
 
-        // Scale name — plain normally, bold when selected
-        g.setColour (juce::Colour (0xffE8EAF0));
-        g.setFont (juce::FontOptions (14.0f, isSelected ? juce::Font::bold : juce::Font::plain));
-        g.drawText (card.key.displayName,
-                    cardRect.reduced (12.0f, 0.0f),
-                    juce::Justification::centredLeft);
-    };
-
-    // Draw paired rows: Major (left) + Minor (right)
-    for (int r = 0; r < (int) pairedRows.size(); ++r)
-    {
-        float y = r * (cardHeight + cardGap);
-        drawCard (pairedRows[(size_t) r].leftIdx, 0.0f, y);
-        drawCard (pairedRows[(size_t) r].rightIdx, cw + colGap, y);
+        // Chip text
+        g.setColour (isSelected ? Theme::accent() : Theme::textPrimary());
+        g.setFont (juce::FontOptions (chipFontSize, isSelected ? juce::Font::bold : juce::Font::plain));
+        g.drawText (card.chipText, r, juce::Justification::centred);
     }
 }
 
 int ScaleResultsPanel::getCardAtPosition (juce::Point<float> pos) const
 {
-    float w = (float) getWidth();
-    float cw = (w - colGap) / 2.0f;
-
-    int row = (int) (pos.y / (cardHeight + cardGap));
-    if (row < 0 || row >= (int) pairedRows.size()) return -1;
-
-    // Determine which column was clicked
-    if (pos.x <= cw)
-        return pairedRows[(size_t) row].leftIdx;
-    else if (pos.x >= cw + colGap)
-        return pairedRows[(size_t) row].rightIdx;
-
-    return -1;  // clicked in the gap
+    for (int i = 0; i < (int) cards.size(); ++i)
+        if (cards[(size_t) i].bounds.contains (pos))
+            return i;
+    return -1;
 }
 
 void ScaleResultsPanel::mouseDown (const juce::MouseEvent& e)
@@ -1072,6 +1174,125 @@ void KeyGridPopup::setSelectedKey (const juce::String& keyName)
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// OptionsPopup
+// ═══════════════════════════════════════════════════════════════════════════
+
+OptionsPopup::OptionsPopup()
+{
+    setInterceptsMouseClicks (true, false);
+    setMouseCursor (juce::MouseCursor::PointingHandCursor);
+    buildItems();
+}
+
+void OptionsPopup::buildItems()
+{
+    items.clear();
+
+    float padX = 8.0f, padY = 8.0f;
+    float itemH = 32.0f;
+    float sepH = 9.0f;
+    float itemW = 204.0f;
+    float y = padY;
+
+    auto addItem = [&] (const juce::String& text, int id) {
+        items.push_back ({ text, id, { padX, y, itemW, itemH } });
+        y += itemH;
+    };
+
+    auto addSep = [&] () {
+        items.push_back ({ "", 0, { padX, y, itemW, sepH } });
+        y += sepH;
+    };
+
+    addItem ("Audio/MIDI Settings...", 1);
+    addSep();
+    addItem ("Save current state...", 2);
+    addItem ("Load a saved state...", 3);
+    addSep();
+    addItem ("Reset to default state", 4);
+
+    float totalW = padX * 2.0f + itemW;
+    float totalH = y + padY;
+    setSize ((int) totalW, (int) totalH);
+}
+
+void OptionsPopup::paint (juce::Graphics& g)
+{
+    auto bounds = getLocalBounds().toFloat();
+
+    g.setColour (juce::Colour (0xf91a1a2e));
+    g.fillRoundedRectangle (bounds, 6.0f);
+
+    g.setColour (juce::Colour (0x14ffffff));
+    g.drawRoundedRectangle (bounds.reduced (0.5f), 6.0f, 1.0f);
+
+    for (int i = 0; i < (int) items.size(); ++i)
+    {
+        auto& item = items[(size_t) i];
+
+        if (item.itemId == 0)
+        {
+            auto sepArea = item.bounds.withSizeKeepingCentre (item.bounds.getWidth() - 8.0f, 1.0f);
+            g.setColour (juce::Colour (0x14ffffff));
+            g.fillRect (sepArea);
+            continue;
+        }
+
+        bool isHovered = (i == hoveredIndex);
+
+        if (isHovered)
+        {
+            g.setColour (juce::Colour (0xff222238));
+            g.fillRoundedRectangle (item.bounds.reduced (2.0f, 1.0f), 4.0f);
+            g.setColour (juce::Colour (0xff8b5cf6));
+            g.drawRoundedRectangle (item.bounds.reduced (2.5f, 1.5f), 4.0f, 1.0f);
+        }
+
+        g.setColour (juce::Colour (0xffE8EAF0));
+        g.setFont (juce::FontOptions (14.0f));
+        g.drawText (item.text, item.bounds.reduced (12.0f, 0.0f),
+                    juce::Justification::centredLeft);
+    }
+}
+
+int OptionsPopup::getItemAtPosition (juce::Point<float> pos) const
+{
+    for (int i = 0; i < (int) items.size(); ++i)
+        if (items[(size_t) i].itemId != 0 && items[(size_t) i].bounds.contains (pos))
+            return i;
+    return -1;
+}
+
+void OptionsPopup::mouseDown (const juce::MouseEvent& e)
+{
+    int idx = getItemAtPosition (e.position);
+    if (idx >= 0 && idx < (int) items.size())
+    {
+        if (onItemSelected)
+            onItemSelected (items[(size_t) idx].itemId);
+    }
+}
+
+void OptionsPopup::mouseMove (const juce::MouseEvent& e)
+{
+    int newHover = getItemAtPosition (e.position);
+    if (newHover != hoveredIndex)
+    {
+        hoveredIndex = newHover;
+        repaint();
+    }
+}
+
+void OptionsPopup::mouseExit (const juce::MouseEvent&)
+{
+    if (hoveredIndex != -1)
+    {
+        hoveredIndex = -1;
+        repaint();
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // ChordsDisplay (leaf component — status messages + chord card)
 // ═══════════════════════════════════════════════════════════════════════════
 
@@ -1107,23 +1328,48 @@ void ChordsDisplay::paint (juce::Graphics& g)
     // ── Status area (non-"some" states) ──────────────────────────────────
     if (resultStatus == "all-visible")
     {
+        bool hov = emptyStateHovered;
         float w_f = (float) getWidth();
+        float radius = 8.0f;
         auto emptyArea = juce::Rectangle<float> ((float) margin, (float) resultsStartY + 8.0f,
-                                                  w_f - margin * 2.0f, 80.0f);
-        g.setColour (Theme::borderGhost());
-        g.drawRoundedRectangle (emptyArea, 6.0f, 1.0f);
+                                                  w_f - margin * 2.0f, 100.0f);
 
-        g.setColour (Theme::textSecondary());
-        g.setFont (juce::FontOptions (13.0f));
+        // Card fill — subtle lift on hover
+        g.setColour (juce::Colour (hov ? 0x0cffffff : 0x06ffffff));
+        g.fillRoundedRectangle (emptyArea, radius);
+
+        // Border — faint accent tint on hover
+        g.setColour (hov ? Theme::accent().withAlpha (0.18f) : Theme::borderGhost());
+        g.drawRoundedRectangle (emptyArea.reduced (0.5f), radius, 1.0f);
+
+        // Music note icon
+        g.setColour (hov ? Theme::textSecondary() : Theme::textMuted());
+        g.setFont (juce::FontOptions (20.0f));
+        g.drawText (juce::CharPointer_UTF8 ("\xe2\x99\xab"),
+                    emptyArea.withHeight (24.0f).translated (0.0f, 12.0f),
+                    juce::Justification::centred);
+
+        // Main text
+        g.setColour (hov ? Theme::textPrimary().withAlpha (0.7f) : Theme::textSecondary());
+        g.setFont (juce::FontOptions (12.0f));
         g.drawText ("Play notes or drop an audio file",
-                    emptyArea.reduced (8.0f, 0.0f).withTrimmedBottom (20.0f),
-                    juce::Justification::centredBottom);
-        g.setColour (Theme::textMuted());
-        g.setFont (juce::FontOptions (10.0f)
+                    emptyArea.withHeight (18.0f).translated (0.0f, 40.0f),
+                    juce::Justification::centred);
+
+        // Browse link
+        g.setColour (hov ? Theme::accent().withAlpha (0.9f) : Theme::accent().withAlpha (0.5f));
+        g.setFont (juce::FontOptions (10.5f));
+        g.drawText ("or click to browse",
+                    emptyArea.withHeight (16.0f).translated (0.0f, 58.0f),
+                    juce::Justification::centred);
+
+        // File formats
+        g.setColour (hov ? Theme::textMuted().brighter (0.3f) : Theme::textMuted());
+        g.setFont (juce::FontOptions (8.5f)
             .withName (juce::Font::getDefaultMonospacedFontName()));
         g.drawText (".wav  .mp3  .aiff  .flac",
-                    emptyArea.reduced (8.0f, 0.0f).withTrimmedTop (44.0f),
-                    juce::Justification::centredTop);
+                    emptyArea.withHeight (14.0f).translated (0.0f, 76.0f),
+                    juce::Justification::centred);
     }
     else if (resultStatus == "none")
     {
@@ -1142,58 +1388,7 @@ void ChordsDisplay::paint (juce::Graphics& g)
                     juce::Justification::centred);
     }
 
-    // ── Chord card (when a key is selected) ──────────────────────────────
-    if (resultStatus == "some" && keyName.isNotEmpty() && ! chordList.empty())
-    {
-        float cardX = (float) margin;
-        float cardY = (float) viewportBottom + 8.0f;
-        float cardW = (float) getWidth() - margin * 2.0f;
-        float cardH = 96.0f;
-        auto chordArea = juce::Rectangle<float> (cardX, cardY, cardW, cardH);
-
-        g.setColour (Theme::cardBg());
-        g.fillRoundedRectangle (chordArea, 6.0f);
-        g.setColour (Theme::borderFaint());
-        g.drawRoundedRectangle (chordArea, 6.0f, 1.0f);
-
-        juce::String displayKey = MusicTheory::getKeyDisplayName (keyName);
-        g.setColour (Theme::accent());
-        g.setFont (juce::FontOptions (14.0f));
-        g.drawText (displayKey, (int) cardX, (int) cardY + 8, (int) cardW, 18,
-                    juce::Justification::centred);
-
-        float colW = cardW / 7.0f;
-        float contentX = cardX;
-        float row1Y = cardY + 32.0f;
-        float row2Y = cardY + 56.0f;
-
-        auto monoChordFont = [] (float size, int style = juce::Font::plain) {
-            return juce::FontOptions (size, style)
-                .withName (juce::Font::getDefaultMonospacedFontName());
-        };
-
-        for (int i = 0; i < (int) chordList.size() && i < 7; ++i)
-        {
-            auto& chord = chordList[(size_t) i];
-            float cx = contentX + i * colW;
-
-            if (i > 0)
-            {
-                g.setColour (Theme::borderVFaint());
-                g.drawVerticalLine ((int) cx, cardY + 28.0f, cardY + cardH - 8.0f);
-            }
-
-            g.setColour (Theme::textPrimary());
-            g.setFont (monoChordFont (14.0f));
-            g.drawText (chord.name, (int) cx, (int) row1Y, (int) colW, 20,
-                        juce::Justification::centred);
-
-            g.setColour (Theme::textSecondary());
-            g.setFont (monoChordFont (12.0f));
-            g.drawText (chord.roman, (int) cx, (int) row2Y, (int) colW, 16,
-                        juce::Justification::centred);
-        }
-    }
+    // Chord card removed — degrees are not shown in the plugin UI
 
     // ── Analysis status text ─────────────────────────────────────────────
     if (statusText.isNotEmpty())
@@ -1353,7 +1548,12 @@ void DragOverlay::paint (juce::Graphics& g)
 ScaleFinderEditor::ScaleFinderEditor (ScaleFinderProcessor& p)
     : AudioProcessorEditor (&p), processorRef (p), pianoKeyboard (p)
 {
-    setSize (460, 520);
+    setSize (460, 480);
+
+    // ── Tooltip styling ───────────────────────────────────────────────
+    tooltipWindow.setColour (juce::TooltipWindow::backgroundColourId, Theme::cardBg());
+    tooltipWindow.setColour (juce::TooltipWindow::textColourId, Theme::textSecondary());
+    tooltipWindow.setColour (juce::TooltipWindow::outlineColourId, Theme::borderSubtle());
 
     // ── Leaf paint components (behind everything / on top of everything) ──
     chordsDisplay.setInterceptsMouseClicks (false, false);
@@ -1393,6 +1593,8 @@ ScaleFinderEditor::ScaleFinderEditor (ScaleFinderProcessor& p)
 
     // ── Key dropdown button (opens grid popup) ─────────────────────
     keyDropdown.setLookAndFeel (&dropdownLF);
+    keyDropdown.setColour (juce::TextButton::buttonColourId, juce::Colour (0x00000000));
+    keyDropdown.setColour (juce::TextButton::textColourOffId, Theme::textSecondary());
     keyDropdown.onClick = [this]() { showKeyGridPopup(); };
     addAndMakeVisible (keyDropdown);
 
@@ -1411,11 +1613,38 @@ ScaleFinderEditor::ScaleFinderEditor (ScaleFinderProcessor& p)
         btn.setColour (juce::TextButton::textColourOffId, Theme::accent());
         btn.setColour (juce::ComboBox::outlineColourId, juce::Colour (0x30ffffff));
         btn.onClick = [this, index]() { applyAlternativeKey (index); };
-        btn.setVisible (false);
-        addAndMakeVisible (btn);
+        addChildComponent (btn);  // hidden by default (only shown after audio analysis)
     };
     setupAltButton (altKeyButton1, 0);
     setupAltButton (altKeyButton2, 1);
+
+    // ── Browse button (invisible overlay, covers the empty state area) ─────
+    browseButton.setColour (juce::TextButton::buttonColourId, juce::Colour (0x00000000));
+    browseButton.setColour (juce::TextButton::buttonOnColourId, juce::Colour (0x00000000));
+    browseButton.setColour (juce::TextButton::textColourOffId, juce::Colour (0x00000000));
+    browseButton.setColour (juce::ComboBox::outlineColourId, juce::Colour (0x00000000));
+    browseButton.setLookAndFeel (&invisibleButtonLF);
+    browseButton.setMouseCursor (juce::MouseCursor::PointingHandCursor);
+    browseButton.onClick = [this]() { openFileBrowser(); };
+    browseButton.onStateChange = [this]()
+    {
+        bool hovered = browseButton.isOver() || browseButton.isDown();
+        if (chordsDisplay.emptyStateHovered != hovered)
+        {
+            chordsDisplay.emptyStateHovered = hovered;
+            chordsDisplay.repaint();
+        }
+    };
+    addAndMakeVisible (browseButton);
+
+    // ── Browse icon button (always-visible shortcut to file browser) ─────
+    browseIconButton.setLookAndFeel (&browseIconLF);
+    browseIconButton.setColour (juce::TextButton::buttonColourId, juce::Colour (0x00000000));
+    browseIconButton.setColour (juce::ComboBox::outlineColourId, juce::Colour (0x14ffffff));
+    browseIconButton.setTooltip ("Open audio file");
+    browseIconButton.setMouseCursor (juce::MouseCursor::PointingHandCursor);
+    browseIconButton.onClick = [this]() { openFileBrowser(); };
+    addAndMakeVisible (browseIconButton);
 
     // Drag overlay (on top of everything, initially hidden)
     dragOverlay.setInterceptsMouseClicks (false, false);
@@ -1425,6 +1654,7 @@ ScaleFinderEditor::ScaleFinderEditor (ScaleFinderProcessor& p)
     pianoKeyboard.addMouseListener (this, false);
     resultsViewport.addMouseListener (this, false);
     resetButton.addMouseListener (this, false);
+    browseIconButton.addMouseListener (this, false);
 
     updateUI();
     startTimerHz (30);
@@ -1440,9 +1670,13 @@ ScaleFinderEditor::~ScaleFinderEditor()
     pianoKeyboard.removeMouseListener (this);
     resultsViewport.removeMouseListener (this);
     resetButton.removeMouseListener (this);
+    browseIconButton.removeMouseListener (this);
     resetButton.setLookAndFeel (nullptr);
     keyDropdown.setLookAndFeel (nullptr);
+    browseButton.setLookAndFeel (nullptr);
+    browseIconButton.setLookAndFeel (nullptr);
     dismissKeyGridPopup();
+    dismissOptionsPopup();
 
     if (auto* window = dynamic_cast<juce::DocumentWindow*> (getTopLevelComponent()))
     {
@@ -1491,6 +1725,7 @@ void ScaleFinderEditor::parentHierarchyChanged()
             auto scheme = v4->getCurrentColourScheme();
             scheme.setUIColour (juce::LookAndFeel_V4::ColourScheme::widgetBackground, Theme::bgTop());
             scheme.setUIColour (juce::LookAndFeel_V4::ColourScheme::windowBackground, Theme::bgTop());
+            scheme.setUIColour (juce::LookAndFeel_V4::ColourScheme::outline, Theme::bgTop());
             v4->setColourScheme (scheme);
         }
 
@@ -1561,40 +1796,9 @@ void ScaleFinderEditor::parentHierarchyChanged()
         {
             auto* btn = new juce::TextButton ("optionsReplacement");
             btn->setButtonText ("");
+            btn->setTooltip ("Options");
             btn->setLookAndFeel (&optionsIconLF);
-            btn->onClick = [this, btn]()
-            {
-                if (optionsMenuOpen)
-                    return;
-
-                optionsMenuOpen = true;
-                optionsIconLF.isActive = true;
-                btn->repaint();
-
-                juce::PopupMenu m;
-                m.addItem (1, TRANS ("Audio/MIDI Settings..."));
-                m.addSeparator();
-                m.addItem (2, TRANS ("Save current state..."));
-                m.addItem (3, TRANS ("Load a saved state..."));
-                m.addSeparator();
-                m.addItem (4, TRANS ("Reset to default state"));
-
-                auto opts = juce::PopupMenu::Options().withTargetComponent (btn);
-
-                m.showMenuAsync (opts, [this, btn] (int result)
-                {
-                    optionsMenuOpen = false;
-                    optionsIconLF.isActive = false;
-                    btn->repaint();
-
-                    if (result == 0) return;
-
-                   #if JucePlugin_Build_Standalone
-                    if (auto* sfw = dynamic_cast<juce::StandaloneFilterWindow*> (getTopLevelComponent()))
-                        sfw->handleMenuResult (result);
-                   #endif
-                });
-            };
+            btn->onClick = [this]() { showOptionsPopup(); };
             static_cast<juce::Component*> (window)->addAndMakeVisible (btn);
             optionsButtonReplacement = btn;
         }
@@ -1604,6 +1808,7 @@ void ScaleFinderEditor::parentHierarchyChanged()
         {
             auto* btn = new juce::TextButton ("keyboardToggle");
             btn->setButtonText ("");
+            btn->setTooltip ("Disable computer keyboard");
             btn->setLookAndFeel (&keyboardIconLF);
             btn->onClick = [this]()
             {
@@ -1619,13 +1824,40 @@ void ScaleFinderEditor::parentHierarchyChanged()
                 }
 
                 if (keyboardToggleButton != nullptr)
+                {
+                    keyboardToggleButton->setTooltip (computerKeyboardEnabled
+                        ? "Disable computer keyboard" : "Enable computer keyboard");
                     keyboardToggleButton->repaint();
+                }
             };
             static_cast<juce::Component*> (window)->addAndMakeVisible (btn);
             keyboardToggleButton = btn;
 
             // Register as KeyListener on the window
             window->addKeyListener (this);
+        }
+
+        // Lock window size (once, after all buttons are created)
+        if (! windowSizeConfigured)
+        {
+            windowSizeConfigured = true;
+            window->setResizable (false, false);
+            window->setContentComponentSize (460, 520);
+
+            // Re-hide any default buttons that reappeared after setResizable
+            for (int i = 0; i < window->getNumChildComponents(); ++i)
+            {
+                auto* child = window->getChildComponent (i);
+                if (dynamic_cast<PurpleWindowButton*> (child) != nullptr) continue;
+                if (dynamic_cast<juce::TextButton*> (child) != nullptr)
+                {
+                    if (child->getName() == "keyboardToggle" || child->getName() == "optionsReplacement")
+                        continue;
+                }
+                if (auto* btn = dynamic_cast<juce::Button*> (child))
+                    if (btn->getName() == "close" || btn->getName() == "minimise" || btn->getName() == "maximise")
+                        btn->setVisible (false);
+            }
         }
     }
 }
@@ -1652,7 +1884,6 @@ void ScaleFinderEditor::paintOverChildren (juce::Graphics& g)
         }
     };
 
-    drawFocusRing (resultsViewport, 8.0f);
     drawFocusRing (keyDropdown, 4.0f);
 }
 
@@ -1675,24 +1906,28 @@ void ScaleFinderEditor::resized()
     pianoKeyboard.setBounds (margin, pianoY, w - margin * 2, pianoH);
 
     // ── Controls row (secondary — compact, side by side) ─────────────
-    int controlsY = pianoY + pianoH + 16;
+    int controlsY = pianoY + pianoH + 12;
     int controlsH = 32;
     int resetW = 72;
-    int dropdownW = w - margin * 2 - resetW - 8;
+    int browseW = 32;
+    int gap = 8;
+    int dropdownW = w - margin * 2 - browseW - resetW - gap * 2;
 
     keyDropdown.setBounds (margin, controlsY, dropdownW, controlsH);
-    resetButton.setBounds (margin + dropdownW + 8, controlsY, resetW, controlsH);
+    browseIconButton.setBounds (margin + dropdownW + gap, controlsY, browseW, controlsH);
+    resetButton.setBounds (margin + dropdownW + gap + browseW + gap, controlsY, resetW, controlsH);
 
     // ── Results viewport (scrollable card list) ───────────────────────
-    int resultsY = controlsY + controlsH + 16;
-    bool hasChordCard = processorRef.selectedKey.isNotEmpty() && ! processorRef.currentChords.empty();
-    int chordCardH = hasChordCard ? 104 : 0;
+    int resultsY = controlsY + controlsH + 12;
     bool hasAlts = altKeyButton1.isVisible();
     int altRowH = hasAlts ? 32 : 0;
-    int resultsH = getHeight() - resultsY - chordCardH - altRowH - 8;
+    int resultsH = getHeight() - resultsY - altRowH - 8;
     resultsViewport.setBounds (margin, resultsY, w - margin * 2, juce::jmax (resultsH, 60));
     resultsPanel.setSize (resultsViewport.getWidth() - (resultsViewport.isVerticalScrollBarShown() ? 6 : 0),
                           resultsPanel.getHeight());
+
+    // ── Browse button (covers the empty state area) ──────────────────
+    browseButton.setBounds (margin, resultsY + 8, w - margin * 2, 100);
 
     // ── Alternative key buttons (below results) ──────────────────────
     if (hasAlts)
@@ -1770,11 +2005,55 @@ void ScaleFinderEditor::timerCallback()
         }
     }
 
-    // Reposition title bar buttons using cached pointers (no child iteration)
+    // Update dropdown outline + text: purple when a key is selected or hovered
+    {
+        bool hasKey = processorRef.selectedKey.isNotEmpty();
+        bool hovered = keyDropdown.isOver() || keyDropdown.hasKeyboardFocus (false);
+        auto outlineCol = (hasKey || hovered) ? Theme::accent() : juce::Colour (0x14ffffff);
+        auto textCol = hasKey ? Theme::textPrimary() : Theme::textSecondary();
+        if (keyDropdown.findColour (juce::ComboBox::outlineColourId) != outlineCol
+            || keyDropdown.findColour (juce::TextButton::textColourOffId) != textCol)
+        {
+            keyDropdown.setColour (juce::ComboBox::outlineColourId, outlineCol);
+            keyDropdown.setColour (juce::TextButton::textColourOffId, textCol);
+            keyDropdown.repaint();
+        }
+    }
+
+    // Update browse icon button outline: purple when hovered
+    {
+        bool active = browseIconButton.isOver() || browseIconButton.hasKeyboardFocus (false);
+        auto col = active ? Theme::accent() : juce::Colour (0x14ffffff);
+        if (browseIconButton.findColour (juce::ComboBox::outlineColourId) != col)
+        {
+            browseIconButton.setColour (juce::ComboBox::outlineColourId, col);
+            browseIconButton.repaint();
+        }
+    }
+
+    // Reposition title bar buttons and keep default ones hidden
     if (titleBarButtonsCached)
     {
         if (auto* window = dynamic_cast<juce::DocumentWindow*> (getTopLevelComponent()))
         {
+            // Re-hide default buttons (StandaloneFilterWindow's resized() can make them visible again)
+            for (int i = 0; i < window->getNumChildComponents(); ++i)
+            {
+                auto* child = window->getChildComponent (i);
+                if (dynamic_cast<PurpleWindowButton*> (child) != nullptr) continue;
+                if (auto* tb = dynamic_cast<juce::TextButton*> (child))
+                {
+                    if (tb->getName() == "keyboardToggle" || tb->getName() == "optionsReplacement")
+                        continue;
+                    tb->setVisible (false);
+                }
+                else if (auto* btn = dynamic_cast<juce::Button*> (child))
+                {
+                    if (btn == cachedCloseBtn || btn == cachedMinimiseBtn) continue;
+                    btn->setVisible (false);
+                }
+            }
+
             int tbH = window->getTitleBarHeight();
             int btnW = tbH - tbH / 8;
             int btnY = (tbH - btnW) / 2;
@@ -1845,6 +2124,9 @@ void ScaleFinderEditor::updateUI()
         resultsPanel.setResults ({}, 0);
         resultsViewport.setVisible (false);
     }
+
+    // Browse button only visible in empty state
+    browseButton.setVisible (result.status == "all-visible");
 
     updateChordsDisplay();
     resized();  // Recalculate layout (chord card space depends on selection)
@@ -1962,14 +2244,82 @@ void ScaleFinderEditor::dismissKeyGridPopup()
     }
 }
 
+void ScaleFinderEditor::showOptionsPopup()
+{
+    if (optionsPopup != nullptr)
+    {
+        dismissOptionsPopup();
+        return;  // toggle off
+    }
+
+    optionsMenuOpen = true;
+    optionsIconLF.isActive = true;
+    if (optionsButtonReplacement != nullptr)
+    {
+        optionsButtonReplacement->setTooltip ("");
+        optionsButtonReplacement->repaint();
+    }
+
+    optionsPopup = std::make_unique<OptionsPopup>();
+    optionsPopup->onItemSelected = [this] (int itemId)
+    {
+        dismissOptionsPopup();
+        if (itemId == 0) return;
+
+       #if JucePlugin_Build_Standalone
+        if (auto* sfw = dynamic_cast<juce::StandaloneFilterWindow*> (getTopLevelComponent()))
+            sfw->handleMenuResult (itemId);
+       #endif
+    };
+
+    // Position at top-right of editor, right-aligned
+    int popupW = optionsPopup->getWidth();
+    int popupH = optionsPopup->getHeight();
+    int popupX = getWidth() - popupW - 8;
+    int popupY = 4;
+
+    if (popupX < 8) popupX = 8;
+    if (popupY + popupH > getHeight() - 8)
+        popupY = getHeight() - 8 - popupH;
+
+    optionsPopup->setBounds (popupX, popupY, popupW, popupH);
+    addAndMakeVisible (*optionsPopup);
+    optionsPopup->toFront (true);
+}
+
+void ScaleFinderEditor::dismissOptionsPopup()
+{
+    if (optionsPopup != nullptr)
+    {
+        removeChildComponent (optionsPopup.get());
+        optionsPopup.reset();
+    }
+
+    optionsMenuOpen = false;
+    optionsIconLF.isActive = false;
+    if (optionsButtonReplacement != nullptr)
+    {
+        optionsButtonReplacement->setTooltip ("Options");
+        optionsButtonReplacement->repaint();
+    }
+}
+
 void ScaleFinderEditor::mouseDown (const juce::MouseEvent& e)
 {
-    // Dismiss popup if click is outside it
+    // Dismiss key grid popup if click is outside it
     if (keyGridPopup != nullptr)
     {
         auto localPos = keyGridPopup->getLocalPoint (this, e.position.toInt());
         if (! keyGridPopup->getLocalBounds().contains (localPos))
             dismissKeyGridPopup();
+    }
+
+    // Dismiss options popup if click is outside it
+    if (optionsPopup != nullptr)
+    {
+        auto localPos = optionsPopup->getLocalPoint (this, e.position.toInt());
+        if (! optionsPopup->getLocalBounds().contains (localPos))
+            dismissOptionsPopup();
     }
 }
 
@@ -2021,6 +2371,33 @@ void ScaleFinderEditor::filesDropped (const juce::StringArray& files, int, int)
     updateChordsDisplay();
 
     audioAnalyzer.analyzeFile (audioFile, processorRef.getAnalysisSampleRate());
+}
+
+void ScaleFinderEditor::openFileBrowser()
+{
+    fileChooser = std::make_unique<juce::FileChooser> (
+        "Select an audio file...",
+        juce::File::getSpecialLocation (juce::File::userHomeDirectory),
+        "*.wav;*.mp3;*.aiff;*.aif;*.flac");
+
+    fileChooser->launchAsync (juce::FileBrowserComponent::openMode
+                            | juce::FileBrowserComponent::canSelectFiles,
+        [this] (const juce::FileChooser& fc)
+        {
+            auto result = fc.getResult();
+            if (result == juce::File{})
+                return;  // User cancelled
+
+            // Same logic as filesDropped
+            processorRef.clearNotes();
+            pianoKeyboard.clearSelection();
+            keyDropdown.setButtonText ("select key...");
+
+            analysisStatusText = "Analyzing...";
+            updateChordsDisplay();
+
+            audioAnalyzer.analyzeFile (result, processorRef.getAnalysisSampleRate());
+        });
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
