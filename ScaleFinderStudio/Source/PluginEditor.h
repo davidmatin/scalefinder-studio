@@ -60,28 +60,41 @@ public:
 
 private:
     int getCardAtPosition (juce::Point<float> pos) const;
-    void layoutChips (float availableWidth);
+    void layoutCards (float availableWidth);
 
     struct CardEntry {
         KeyInfo key;
-        juce::String chipText;
+        juce::String chipText;                // Abbreviated ("C Maj") for chip display
+        juce::String displayText;             // Full display name ("C Major")
         juce::Rectangle<float> bounds;
         bool isExactMatch;
+        std::vector<ChordInfo> chords;        // Chord progression for this key
     };
     std::vector<CardEntry> cards;
     juce::String selectedKeyName;
 
     int hoveredCardIndex = -1;
     int majorCount = 0;
-    float separatorY = 0.0f;
+    int selectedCardIdx = -1;                 // Index of selected card (-1 = none)
+    float relLabelY = 0.0f;                   // Y position of "relative minor/major" label
+    float chipSectionY = 0.0f;                // Y where chips start (after selected card)
     bool isRelativePair = false;
 
+    // Chip constants (browsing / unselected keys)
     static constexpr float chipHeight = 28.0f;
     static constexpr float chipGap = 4.0f;
     static constexpr float chipPadX = 8.0f;
     static constexpr float chipRadius = 14.0f;
     static constexpr float chipFontSize = 14.0f;
     static constexpr float separatorGap = 8.0f;
+
+    // Card constants (selected key detail view)
+    static constexpr float cardHeight = 52.0f;       // Selected key card height
+    static constexpr float cardPrimaryH = 56.0f;     // Primary card in relative pair
+    static constexpr float cardGap = 6.0f;           // Gap between card and chips
+    static constexpr float cardRadius = 10.0f;       // Corner radius
+    static constexpr float cardPadX = 14.0f;         // Horizontal padding inside card
+    static constexpr float cardPadY = 8.0f;          // Vertical padding inside card
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ScaleResultsPanel)
 };

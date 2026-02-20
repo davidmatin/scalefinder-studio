@@ -114,11 +114,15 @@ static void drawNeumorphicPill (juce::Graphics& g, juce::Rectangle<float> bounds
 {
     float r = bounds.getHeight() * 0.5f;
 
-    // Neumorphic inset shadow (dark top edge, faint highlight bottom)
-    g.setColour (juce::Colour (0x25000000));
-    g.drawRoundedRectangle (bounds.translated (0.0f, -0.5f), r, 1.0f);
-    g.setColour (juce::Colour (0x0cffffff));
-    g.drawRoundedRectangle (bounds.translated (0.0f, 0.5f), r, 0.5f);
+    // Drop shadow (neumorphic depth)
+    g.setColour (juce::Colour (0x20000000));
+    g.fillRoundedRectangle (bounds.translated (0.0f, 1.5f).expanded (0.5f), r + 0.5f);
+    g.setColour (juce::Colour (0x10000000));
+    g.fillRoundedRectangle (bounds.translated (0.0f, 3.0f).expanded (1.0f), r + 1.0f);
+
+    // Top-edge highlight
+    g.setColour (juce::Colour (0x0affffff));
+    g.drawRoundedRectangle (bounds.translated (0.0f, -0.5f), r, 0.5f);
 
     // Gradient fill
     juce::ColourGradient grad (juce::Colour (0xff242840), 0.0f, bounds.getY(),
@@ -405,11 +409,15 @@ void InstrumentButton::paint (juce::Graphics& g)
     auto bounds = getLocalBounds().toFloat().reduced (0.5f);
     float r = bounds.getHeight() * 0.5f;  // full capsule radius
 
-    // ── Neumorphic inset shadow (dark top edge, faint highlight bottom) ──
-    g.setColour (juce::Colour (0x25000000));
-    g.drawRoundedRectangle (bounds.translated (0.0f, -0.5f), r, 1.0f);
-    g.setColour (juce::Colour (0x0cffffff));
-    g.drawRoundedRectangle (bounds.translated (0.0f, 0.5f), r, 0.5f);
+    // ── Drop shadow (neumorphic depth) ──────────────────────────────
+    g.setColour (juce::Colour (0x20000000));
+    g.fillRoundedRectangle (bounds.translated (0.0f, 1.5f).expanded (0.5f), r + 0.5f);
+    g.setColour (juce::Colour (0x10000000));
+    g.fillRoundedRectangle (bounds.translated (0.0f, 3.0f).expanded (1.0f), r + 1.0f);
+
+    // ── Top-edge highlight ───────────────────────────────────────────
+    g.setColour (juce::Colour (0x0affffff));
+    g.drawRoundedRectangle (bounds.translated (0.0f, -0.5f), r, 0.5f);
 
     // ── Fill with gradient ───────────────────────────────────────────
     {
@@ -603,8 +611,17 @@ void VolumeKnob::paint (juce::Graphics& g)
     float cy = bounds.getCentreY();
     float radius = size * 0.5f;
 
+    // ── Drop shadow (neumorphic depth) ──────────────────────────────
+    {
+        float sR1 = radius + 0.5f;
+        g.setColour (juce::Colour (0x20000000));
+        g.fillEllipse (cx - sR1, cy - sR1 + 1.5f, sR1 * 2.0f, sR1 * 2.0f);
+        float sR2 = radius + 1.0f;
+        g.setColour (juce::Colour (0x10000000));
+        g.fillEllipse (cx - sR2, cy - sR2 + 3.0f, sR2 * 2.0f, sR2 * 2.0f);
+    }
+
     // ── Neumorphic shadow well (inset ring) ─────────────────────────
-    // Dark shadow (top-left) and faint highlight (bottom-right)
     {
         float wellR = radius - 1.0f;
         g.setColour (juce::Colour (0x30000000));
@@ -1181,6 +1198,8 @@ void ScaleResultsPanel::setResults (const std::vector<KeyInfo>& keys, int select
         CardEntry entry;
         entry.key = key;
         entry.isExactMatch = ((int) key.pitchClasses.size() == selectedNoteCount);
+        entry.displayText = key.displayName;
+        entry.chords = MusicTheory::getChordProgressions (key.name);
 
         // Abbreviated chip text: "C Maj", "A min"
         if (key.type == "Major")
@@ -1209,21 +1228,30 @@ void ScaleResultsPanel::setResults (const std::vector<KeyInfo>& keys, int select
 
     // Detect relative major/minor pair (exactly 1 major + 1 minor)
     isRelativePair = (cards.size() == 2 && majorCount == 1);
-    if (isRelativePair)
-        for (auto& c : cards)
-            c.chipText = c.key.displayName;  // Full names in pair mode
 
-    layoutChips ((float) getWidth());
+    layoutCards ((float) getWidth());
     repaint();
 }
 
-void ScaleResultsPanel::layoutChips (float availableWidth)
+void ScaleResultsPanel::layoutCards (float availableWidth)
 {
     if (cards.empty() || availableWidth <= 0.0f)
     {
-        separatorY = 0.0f;
+        relLabelY = 0.0f;
+        selectedCardIdx = -1;
         setSize ((int) availableWidth, 1);
         return;
+    }
+
+    // Find selected card index
+    selectedCardIdx = -1;
+    for (int i = 0; i < (int) cards.size(); ++i)
+    {
+        if (cards[(size_t) i].key.name == selectedKeyName)
+        {
+            selectedCardIdx = i;
+            break;
+        }
     }
 
     // ── Special layout: relative pair (1 major + 1 minor) ──────────────
@@ -1237,147 +1265,223 @@ void ScaleResultsPanel::layoutChips (float availableWidth)
             secondaryIdx = 0;
         }
 
-        // Primary pill: 32px tall, 19px bold, 18px horiz padding
-        constexpr float pPadX = 18.0f;
-        constexpr float pH = 32.0f;
-        constexpr float pFontSize = 19.0f;
-        // Secondary pill: 28px tall, 15px plain, 14px horiz padding
-        constexpr float sPadX = 14.0f;
-        constexpr float sH = 28.0f;
-        constexpr float sFontSize = 15.0f;
-        // Gaps
-        constexpr float labelH = 13.0f;
-        constexpr float gapA = 1.0f;  // after primary
-        constexpr float gapB = 1.0f;  // after label
+        // If a key is selected, show both as full-width cards (no floating label)
+        if (selectedCardIdx >= 0)
+        {
+            float y = 4.0f;
 
-        // Content block height
-        float contentH = pH + gapA + labelH + gapB + sH;  // 75px
+            // Primary: full-width card (larger)
+            cards[(size_t) primaryIdx].bounds = { 0.0f, y, availableWidth, cardPrimaryH };
+            y += cardPrimaryH + cardGap;
 
-        // Use viewport height for vertical centering
+            // Secondary: full-width card (standard) — "relative minor/major" shown as category label inside
+            cards[(size_t) secondaryIdx].bounds = { 0.0f, y, availableWidth, cardHeight };
+            y += cardHeight + 4.0f;
+
+            setSize ((int) availableWidth, juce::jmax ((int) y, 1));
+            return;
+        }
+
+        // No selection: both as centered chips with label between
+        float contentH = 32.0f + 1.0f + 13.0f + 1.0f + 28.0f;  // primary pill + gaps + label + secondary pill
         float panelH = (float) getParentHeight();
         if (panelH < contentH) panelH = contentH + 4.0f;
         float topY = (panelH - contentH) * 0.5f;
-
         float y = topY;
 
-        // Primary pill bounds
-        juce::Font pFont { juce::FontOptions (pFontSize, juce::Font::bold) };
-        float pTextW = pFont.getStringWidthFloat (cards[(size_t) primaryIdx].chipText);
-        float pW = pTextW + pPadX * 2.0f;
+        // Primary pill (slightly larger chip)
+        juce::Font pFont { juce::FontOptions (19.0f, juce::Font::bold) };
+        float pTextW = pFont.getStringWidthFloat (cards[(size_t) primaryIdx].displayText);
+        float pW = pTextW + 18.0f * 2.0f;
         float pX = (availableWidth - pW) * 0.5f;
-        cards[(size_t) primaryIdx].bounds = { pX, y, pW, pH };
+        cards[(size_t) primaryIdx].bounds = { pX, y, pW, 32.0f };
+        y += 32.0f + 1.0f;
 
-        // Label Y (repurpose separatorY)
-        separatorY = y + pH + gapA;
+        relLabelY = y;
+        y += 13.0f + 1.0f;
 
-        // Secondary pill bounds
-        float sY = separatorY + labelH + gapB;
-        juce::Font sFont { juce::FontOptions (sFontSize) };
-        float sTextW = sFont.getStringWidthFloat (cards[(size_t) secondaryIdx].chipText);
-        float sW = sTextW + sPadX * 2.0f;
+        // Secondary pill
+        juce::Font sFont { juce::FontOptions (15.0f) };
+        float sTextW = sFont.getStringWidthFloat (cards[(size_t) secondaryIdx].displayText);
+        float sW = sTextW + 14.0f * 2.0f;
         float sX = (availableWidth - sW) * 0.5f;
-        cards[(size_t) secondaryIdx].bounds = { sX, sY, sW, sH };
+        cards[(size_t) secondaryIdx].bounds = { sX, y, sW, 28.0f };
 
-        int totalH = (int) panelH;
-        setSize ((int) availableWidth, juce::jmax (totalH, 1));
+        setSize ((int) availableWidth, juce::jmax ((int) panelH, 1));
         return;
     }
 
-    // ── Standard chip flow layout ────────────────────────────────────────
+    // ── Hybrid layout: card for selected key, chips for the rest ────────
+    float y = 4.0f;
     juce::Font font { juce::FontOptions (chipFontSize) };
-    float cursorX = 0.0f;
-    float cursorY = 4.0f;  // small top padding
 
-    // Layout Major chips (left-aligned first, then centered)
+    // If a key is selected, place its card at the top
+    if (selectedCardIdx >= 0)
+    {
+        cards[(size_t) selectedCardIdx].bounds = { 0.0f, y, availableWidth, cardHeight };
+        y += cardHeight + cardGap + 4.0f;  // extra breathing room before chips
+    }
+
+    chipSectionY = y;
+
+    // Count major/minor chips (excluding selected card)
+    int majorChipCount = 0;
+    for (int i = 0; i < majorCount; ++i)
+        if (i != selectedCardIdx) ++majorChipCount;
+
+    // Layout Major chips
+    float cursorX = 0.0f;
     for (int i = 0; i < majorCount && i < (int) cards.size(); ++i)
     {
+        if (i == selectedCardIdx) continue;
+
         float textW = font.getStringWidthFloat (cards[(size_t) i].chipText);
         float chipW = textW + chipPadX * 2.0f;
 
         if (cursorX + chipW > availableWidth && cursorX > 0.0f)
         {
             cursorX = 0.0f;
-            cursorY += chipHeight + chipGap;
+            y += chipHeight + chipGap;
         }
 
-        cards[(size_t) i].bounds = { cursorX, cursorY, chipW, chipHeight };
+        cards[(size_t) i].bounds = { cursorX, y, chipW, chipHeight };
         cursorX += chipW + chipGap;
     }
 
-    // Center each Major row
+    // Center each Major chip row
     {
-        int rowStart = 0;
-        for (int i = 0; i <= majorCount; ++i)
+        float rowY = chipSectionY;
+        int rowStart = -1;
+        for (int i = 0; i < majorCount && i < (int) cards.size(); ++i)
         {
-            bool endOfRow = (i == majorCount)
-                         || (i > rowStart && cards[(size_t) i].bounds.getY() != cards[(size_t) rowStart].bounds.getY());
-            if (endOfRow && i > rowStart)
+            if (i == selectedCardIdx) continue;
+            if (rowStart < 0) { rowStart = i; rowY = cards[(size_t) i].bounds.getY(); }
+
+            bool newRow = (cards[(size_t) i].bounds.getY() != rowY);
+            if (newRow)
             {
-                float rowRight = cards[(size_t) (i - 1)].bounds.getRight();
+                // Center the previous row
+                float rowRight = 0.0f;
+                for (int j = rowStart; j < i; ++j)
+                    if (j != selectedCardIdx)
+                        rowRight = juce::jmax (rowRight, cards[(size_t) j].bounds.getRight());
                 float offset = (availableWidth - rowRight) * 0.5f;
                 for (int j = rowStart; j < i; ++j)
-                    cards[(size_t) j].bounds.translate (offset, 0.0f);
+                    if (j != selectedCardIdx)
+                        cards[(size_t) j].bounds.translate (offset, 0.0f);
+
                 rowStart = i;
+                rowY = cards[(size_t) i].bounds.getY();
             }
+        }
+        // Center last Major row
+        if (rowStart >= 0)
+        {
+            float rowRight = 0.0f;
+            for (int j = rowStart; j < majorCount && j < (int) cards.size(); ++j)
+                if (j != selectedCardIdx)
+                    rowRight = juce::jmax (rowRight, cards[(size_t) j].bounds.getRight());
+            float offset = (availableWidth - rowRight) * 0.5f;
+            for (int j = rowStart; j < majorCount && j < (int) cards.size(); ++j)
+                if (j != selectedCardIdx)
+                    cards[(size_t) j].bounds.translate (offset, 0.0f);
         }
     }
 
-    // Separator between Major and Minor groups
-    bool hasMinors = majorCount < (int) cards.size();
-    if (majorCount > 0 && hasMinors)
+    // Separator between Major and Minor chip groups
+    bool hasMinorChips = false;
+    for (int i = majorCount; i < (int) cards.size(); ++i)
+        if (i != selectedCardIdx) { hasMinorChips = true; break; }
+
+    if (majorChipCount > 0 && hasMinorChips)
     {
-        cursorY += chipHeight + separatorGap;
-        separatorY = cursorY;
-        cursorY += separatorGap;
+        y += chipHeight + separatorGap;
+        relLabelY = y;  // reuse for separator line position
+        y += separatorGap;
     }
     else
     {
-        separatorY = 0.0f;
+        relLabelY = 0.0f;
     }
 
-    // Layout Minor chips (left-aligned first, then centered)
+    // Layout Minor chips
     cursorX = 0.0f;
     for (int i = majorCount; i < (int) cards.size(); ++i)
     {
+        if (i == selectedCardIdx) continue;
+
         float textW = font.getStringWidthFloat (cards[(size_t) i].chipText);
         float chipW = textW + chipPadX * 2.0f;
 
         if (cursorX + chipW > availableWidth && cursorX > 0.0f)
         {
             cursorX = 0.0f;
-            cursorY += chipHeight + chipGap;
+            y += chipHeight + chipGap;
         }
 
-        cards[(size_t) i].bounds = { cursorX, cursorY, chipW, chipHeight };
+        cards[(size_t) i].bounds = { cursorX, y, chipW, chipHeight };
         cursorX += chipW + chipGap;
     }
 
-    // Center each Minor row
+    // Center each Minor chip row
     {
-        int rowStart = majorCount;
-        for (int i = majorCount; i <= (int) cards.size(); ++i)
+        float rowY = -1.0f;
+        int rowStart = -1;
+        for (int i = majorCount; i < (int) cards.size(); ++i)
         {
-            bool endOfRow = (i == (int) cards.size())
-                         || (i > rowStart && cards[(size_t) i].bounds.getY() != cards[(size_t) rowStart].bounds.getY());
-            if (endOfRow && i > rowStart)
+            if (i == selectedCardIdx) continue;
+            if (rowStart < 0) { rowStart = i; rowY = cards[(size_t) i].bounds.getY(); }
+
+            bool newRow = (cards[(size_t) i].bounds.getY() != rowY);
+            if (newRow)
             {
-                float rowRight = cards[(size_t) (i - 1)].bounds.getRight();
+                float rowRight = 0.0f;
+                for (int j = rowStart; j < i; ++j)
+                    if (j != selectedCardIdx)
+                        rowRight = juce::jmax (rowRight, cards[(size_t) j].bounds.getRight());
                 float offset = (availableWidth - rowRight) * 0.5f;
                 for (int j = rowStart; j < i; ++j)
-                    cards[(size_t) j].bounds.translate (offset, 0.0f);
+                    if (j != selectedCardIdx)
+                        cards[(size_t) j].bounds.translate (offset, 0.0f);
+
                 rowStart = i;
+                rowY = cards[(size_t) i].bounds.getY();
             }
+        }
+        // Center last Minor row
+        if (rowStart >= 0)
+        {
+            float rowRight = 0.0f;
+            for (int j = rowStart; j < (int) cards.size(); ++j)
+                if (j != selectedCardIdx)
+                    rowRight = juce::jmax (rowRight, cards[(size_t) j].bounds.getRight());
+            float offset = (availableWidth - rowRight) * 0.5f;
+            for (int j = rowStart; j < (int) cards.size(); ++j)
+                if (j != selectedCardIdx)
+                    cards[(size_t) j].bounds.translate (offset, 0.0f);
         }
     }
 
-    int totalH = (int) (cursorY + chipHeight + 4.0f);
+    // Check if any minor chips were laid out to get the last y
+    float lastChipBottom = chipSectionY;
+    for (int i = 0; i < (int) cards.size(); ++i)
+    {
+        if (i == selectedCardIdx) continue;
+        lastChipBottom = juce::jmax (lastChipBottom, cards[(size_t) i].bounds.getBottom());
+    }
+
+    int totalH = (int) (lastChipBottom + 4.0f);
+    // If only the selected card (no chips), use card bottom
+    if (selectedCardIdx >= 0 && (int) cards.size() == 1)
+        totalH = (int) (cards[(size_t) selectedCardIdx].bounds.getBottom() + 4.0f);
+
     setSize ((int) availableWidth, juce::jmax (totalH, 1));
 }
 
 void ScaleResultsPanel::resized()
 {
     if (! cards.empty())
-        layoutChips ((float) getWidth());
+        layoutCards ((float) getWidth());
 }
 
 void ScaleResultsPanel::setSelectedKey (const juce::String& keyName)
@@ -1385,19 +1489,113 @@ void ScaleResultsPanel::setSelectedKey (const juce::String& keyName)
     if (selectedKeyName != keyName)
     {
         selectedKeyName = keyName;
-        if (isRelativePair)
-            layoutChips ((float) getWidth());  // Primary/secondary may swap
+        layoutCards ((float) getWidth());  // Layout changes with selection
         repaint();
     }
 }
 
 void ScaleResultsPanel::paint (juce::Graphics& g)
 {
+    // ── Helper: draw a full-width detail card (selected key) ────────────
+    auto drawDetailCard = [&] (const CardEntry& card, int idx, float titleSize,
+                               const juce::String& categoryOverride = {})
+    {
+        auto r = card.bounds;
+        bool isSel = (card.key.name == selectedKeyName);
+        bool isHov = (idx == hoveredCardIndex);
+
+        // ── Drop shadow (neumorphic depth) ──────────────────────────
+        {
+            auto shadowRect = r.translated (0.0f, 2.0f).expanded (1.0f);
+            g.setColour (juce::Colour (0x30000000));
+            g.fillRoundedRectangle (shadowRect, cardRadius + 1.0f);
+
+            auto shadowRect2 = r.translated (0.0f, 4.0f).expanded (2.0f);
+            g.setColour (juce::Colour (0x18000000));
+            g.fillRoundedRectangle (shadowRect2, cardRadius + 2.0f);
+        }
+
+        // ── Top-edge highlight (subtle light from above) ────────────
+        g.setColour (juce::Colour (0x0affffff));
+        g.drawRoundedRectangle (r.reduced (0.5f).translated (0.0f, -0.5f), cardRadius, 0.5f);
+
+        // ── Gradient fill ───────────────────────────────────────────
+        if (isSel)
+        {
+            g.setColour (Theme::accent().withAlpha (0.15f));
+            g.fillRoundedRectangle (r, cardRadius);
+        }
+        else
+        {
+            juce::ColourGradient grad (
+                isHov ? juce::Colour (0xff2A2E48) : juce::Colour (0xff242840),
+                0.0f, r.getY(),
+                isHov ? juce::Colour (0xff222238) : juce::Colour (0xff1C2030),
+                0.0f, r.getBottom(), false);
+            g.setGradientFill (grad);
+            g.fillRoundedRectangle (r, cardRadius);
+        }
+
+        // ── Border ──────────────────────────────────────────────────
+        if (isSel)
+            g.setColour (Theme::accent());
+        else if (isHov)
+            g.setColour (Theme::borderSubtle());
+        else
+            g.setColour (Theme::borderFaint());
+        g.drawRoundedRectangle (r.reduced (0.5f), cardRadius, 0.75f);
+
+        // ── Content ─────────────────────────────────────────────────
+        float cx = r.getX() + cardPadX;
+        float cy = r.getY() + cardPadY;
+        float cw = r.getWidth() - cardPadX * 2.0f;
+
+        // Category label
+        juce::String category = categoryOverride.isNotEmpty()
+                                    ? categoryOverride
+                                    : card.key.type.toUpperCase();
+        g.setColour (isSel ? Theme::accent().withAlpha (0.5f) : Theme::textMuted());
+        g.setFont (juce::FontOptions (9.0f).withStyle ("Bold"));
+        g.drawText (category, (int) cx, (int) cy, (int) cw, 11,
+                    juce::Justification::centredLeft);
+        cy += 12.0f;
+
+        // Key name
+        g.setColour (isSel ? Theme::accent() : Theme::textPrimary());
+        g.setFont (juce::FontOptions (titleSize, juce::Font::bold));
+        g.drawText (card.displayText, (int) cx, (int) cy, (int) cw, 22,
+                    juce::Justification::centredLeft);
+    };
+
+    // ── Helper: draw a chip (unselected key) ────────────────────────────
+    auto drawChip = [&] (const CardEntry& card, int idx)
+    {
+        auto& r = card.bounds;
+        bool isHov = (idx == hoveredCardIndex);
+
+        // Chip background
+        if (isHov)
+            g.setColour (juce::Colour (0xff222238));
+        else
+            g.setColour (Theme::cardBg());
+        g.fillRoundedRectangle (r, chipRadius);
+
+        // Chip border
+        if (isHov)
+            g.setColour (Theme::accent().withAlpha (0.6f));
+        else
+            g.setColour (Theme::borderFaint());
+        g.drawRoundedRectangle (r.reduced (0.5f), chipRadius, 1.0f);
+
+        // Chip text
+        g.setColour (isHov ? Theme::textPrimary() : Theme::textPrimary());
+        g.setFont (juce::FontOptions (chipFontSize));
+        g.drawText (card.chipText, r, juce::Justification::centred);
+    };
+
     // ── Special paint: relative pair ─────────────────────────────────────
     if (isRelativePair && cards.size() == 2)
     {
-
-        // Determine primary/secondary (same logic as layoutChips)
         int primaryIdx = 0, secondaryIdx = 1;
         if (selectedKeyName.isNotEmpty() && cards[1].key.name == selectedKeyName)
         {
@@ -1405,119 +1603,87 @@ void ScaleResultsPanel::paint (juce::Graphics& g)
             secondaryIdx = 0;
         }
 
-        // ── Primary pill ─────────────────────────────────────────────
+        if (selectedCardIdx >= 0)
         {
-            auto& card = cards[(size_t) primaryIdx];
-            auto& r = card.bounds;
-            bool isSel = (card.key.name == selectedKeyName);
-            bool isHov = (primaryIdx == hoveredCardIndex);
+            // Selected: both as full-width detail cards
+            drawDetailCard (cards[(size_t) primaryIdx], primaryIdx, 19.0f);
 
-            if (isSel)
-                g.setColour (Theme::accent().withAlpha (0.18f));
-            else if (isHov)
-                g.setColour (juce::Colour (0xff222238));
-            else
-                g.setColour (Theme::cardBg());
-            g.fillRoundedRectangle (r, 16.0f);
-
-            if (isSel)
-                g.setColour (Theme::accent());
-            else if (isHov)
-                g.setColour (Theme::accent().withAlpha (0.6f));
-            else
-                g.setColour (Theme::accent().withAlpha (0.3f));
-            g.drawRoundedRectangle (r.reduced (0.5f), 16.0f, 1.0f);
-
-            g.setColour (isSel ? Theme::accent() : Theme::textPrimary());
-            g.setFont (juce::FontOptions (19.0f, juce::Font::bold));
-            g.drawText (card.chipText, r, juce::Justification::centred);
+            // Secondary card with "RELATIVE MINOR"/"RELATIVE MAJOR" as category
+            juce::String relCategory = (cards[(size_t) secondaryIdx].key.type == "Major")
+                                           ? "RELATIVE MAJOR"
+                                           : "RELATIVE MINOR";
+            drawDetailCard (cards[(size_t) secondaryIdx], secondaryIdx, 17.0f, relCategory);
         }
-
-        // ── Relationship label ───────────────────────────────────────
+        else
         {
+            // No selection: both as pills (original relative pair style)
+            // Primary pill
+            {
+                auto& card = cards[(size_t) primaryIdx];
+                auto& r = card.bounds;
+                bool isHov = (primaryIdx == hoveredCardIndex);
+
+                g.setColour (isHov ? juce::Colour (0xff222238) : Theme::cardBg());
+                g.fillRoundedRectangle (r, 16.0f);
+                g.setColour (isHov ? Theme::accent().withAlpha (0.6f) : Theme::accent().withAlpha (0.3f));
+                g.drawRoundedRectangle (r.reduced (0.5f), 16.0f, 1.0f);
+                g.setColour (Theme::textPrimary());
+                g.setFont (juce::FontOptions (19.0f, juce::Font::bold));
+                g.drawText (card.displayText, r, juce::Justification::centred);
+            }
+
+            // Relationship label
             juce::String label = (cards[(size_t) primaryIdx].key.type == "Major")
                                      ? "relative minor"
                                      : "relative major";
             g.setColour (Theme::textSecondary().withAlpha (0.5f));
             g.setFont (juce::FontOptions (11.0f));
-            g.drawText (label, 0, (int) separatorY, getWidth(), 13,
+            g.drawText (label, 0, (int) relLabelY, getWidth(), 13,
                         juce::Justification::centred);
+
+            // Secondary pill
+            {
+                auto& card = cards[(size_t) secondaryIdx];
+                auto& r = card.bounds;
+                bool isHov = (secondaryIdx == hoveredCardIndex);
+
+                g.setColour (isHov ? juce::Colour (0xff222238) : Theme::cardBg());
+                g.fillRoundedRectangle (r, 14.0f);
+                g.setColour (isHov ? Theme::accent().withAlpha (0.4f) : Theme::borderFaint());
+                g.drawRoundedRectangle (r.reduced (0.5f), 14.0f, 1.0f);
+                g.setColour (isHov ? Theme::textPrimary() : Theme::textSecondary());
+                g.setFont (juce::FontOptions (15.0f));
+                g.drawText (card.displayText, r, juce::Justification::centred);
+            }
         }
-
-        // ── Secondary pill ───────────────────────────────────────────
-        {
-            auto& card = cards[(size_t) secondaryIdx];
-            auto& r = card.bounds;
-            bool isSel = (card.key.name == selectedKeyName);
-            bool isHov = (secondaryIdx == hoveredCardIndex);
-
-            if (isSel)
-                g.setColour (Theme::accent().withAlpha (0.12f));
-            else if (isHov)
-                g.setColour (juce::Colour (0xff222238));
-            else
-                g.setColour (Theme::cardBg());
-            g.fillRoundedRectangle (r, 14.0f);
-
-            if (isSel)
-                g.setColour (Theme::accent().withAlpha (0.7f));
-            else if (isHov)
-                g.setColour (Theme::accent().withAlpha (0.4f));
-            else
-                g.setColour (Theme::borderFaint());
-            g.drawRoundedRectangle (r.reduced (0.5f), 14.0f, 1.0f);
-
-            if (isSel)
-                g.setColour (Theme::accent());
-            else if (isHov)
-                g.setColour (Theme::textPrimary());
-            else
-                g.setColour (Theme::textSecondary());
-            g.setFont (juce::FontOptions (15.0f));
-            g.drawText (card.chipText, r, juce::Justification::centred);
-        }
-
         return;
     }
 
-    // ── Standard chip rendering ──────────────────────────────────────────
-    // Separator line between Major and Minor groups
-    if (majorCount > 0 && majorCount < (int) cards.size() && separatorY > 0.0f)
+    // ── Standard hybrid rendering ────────────────────────────────────────
+
+    // Draw selected key as detail card
+    if (selectedCardIdx >= 0)
+        drawDetailCard (cards[(size_t) selectedCardIdx], selectedCardIdx, 17.0f);
+
+    // Separator line between Major and Minor chip groups
+    int majorChipCount = 0;
+    for (int i = 0; i < majorCount; ++i)
+        if (i != selectedCardIdx) ++majorChipCount;
+    bool hasMinorChips = false;
+    for (int i = majorCount; i < (int) cards.size(); ++i)
+        if (i != selectedCardIdx) { hasMinorChips = true; break; }
+
+    if (majorChipCount > 0 && hasMinorChips && relLabelY > 0.0f)
     {
         g.setColour (Theme::borderSubtle());
-        g.drawLine (0.0f, separatorY, (float) getWidth(), separatorY, 1.0f);
+        g.drawLine (0.0f, relLabelY, (float) getWidth(), relLabelY, 1.0f);
     }
 
-    // Draw each chip
+    // Draw unselected keys as chips
     for (int i = 0; i < (int) cards.size(); ++i)
     {
-        auto& card = cards[(size_t) i];
-        auto& r = card.bounds;
-        bool isSelected = (card.key.name == selectedKeyName);
-        bool isHovered = (i == hoveredCardIndex);
-
-        // Chip background
-        if (isSelected)
-            g.setColour (Theme::accent().withAlpha (0.15f));
-        else if (isHovered)
-            g.setColour (juce::Colour (0xff222238));
-        else
-            g.setColour (Theme::cardBg());
-        g.fillRoundedRectangle (r, chipRadius);
-
-        // Chip border
-        if (isSelected)
-            g.setColour (Theme::accent());
-        else if (isHovered)
-            g.setColour (Theme::accent().withAlpha (0.6f));
-        else
-            g.setColour (Theme::borderFaint());
-        g.drawRoundedRectangle (r.reduced (0.5f), chipRadius, 1.0f);
-
-        // Chip text
-        g.setColour (isSelected ? Theme::accent() : Theme::textPrimary());
-        g.setFont (juce::FontOptions (chipFontSize, isSelected ? juce::Font::bold : juce::Font::plain));
-        g.drawText (card.chipText, r, juce::Justification::centred);
+        if (i == selectedCardIdx) continue;
+        drawChip (cards[(size_t) i], i);
     }
 }
 
