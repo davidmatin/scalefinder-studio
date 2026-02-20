@@ -73,6 +73,12 @@ void ScaleFinderProcessor::processBlock (juce::AudioBuffer<float>& buffer,
 
     // Render piano audio (includes both external + GUI MIDI)
     pianoSynth.renderNextBlock (buffer, midiMessages, 0, buffer.getNumSamples());
+
+    // Apply master volume / mute
+    float gain = isMuted.load (std::memory_order_relaxed) ? 0.0f
+                                                          : masterVolume.load (std::memory_order_relaxed);
+    if (gain != 1.0f)
+        buffer.applyGain (gain);
 }
 
 // ── UI-thread API (all called from message thread) ───────────────────────

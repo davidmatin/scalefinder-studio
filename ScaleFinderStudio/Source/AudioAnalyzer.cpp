@@ -62,6 +62,12 @@ std::vector<AudioAnalyzer::AlternativeKey> AudioAnalyzer::getAlternativeKeys() c
     return alternativeKeys;
 }
 
+juce::String AudioAnalyzer::getDetectedKeyName() const
+{
+    const juce::ScopedLock sl (resultLock);
+    return detectedKeyName;
+}
+
 int AudioAnalyzer::hzToMidi (float hz)
 {
     if (hz <= 0.0f) return -1;
@@ -347,14 +353,15 @@ void AudioAnalyzer::run()
     }
 
     std::set<int> result;
+    juce::String keyName;
     if (bestCorr >= (double) minCorrelation)
     {
         const int* intervals = bestIsMajor ? MAJOR_INTERVALS : MINOR_INTERVALS;
         for (int i = 0; i < 7; ++i)
             result.insert ((bestRoot + intervals[i]) % 12);
 
-        DBG ("AudioAnalyzer: Detected key = " + juce::String (noteNames[bestRoot])
-             + (bestIsMajor ? " Major" : " Minor") + " (r=" + juce::String (bestCorr, 3) + ")");
+        keyName = juce::String (noteNames[bestRoot]) + (bestIsMajor ? " Major" : " Minor");
+        DBG ("AudioAnalyzer: Detected key = " + keyName + " (r=" + juce::String (bestCorr, 3) + ")");
     }
     else
     {
@@ -397,6 +404,7 @@ void AudioAnalyzer::run()
     {
         const juce::ScopedLock sl (resultLock);
         detectedPitchClasses = result;
+        detectedKeyName = keyName;
         alternativeKeys = alts;
     }
 

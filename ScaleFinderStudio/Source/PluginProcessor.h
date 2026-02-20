@@ -103,6 +103,13 @@ public:
     std::vector<ChordInfo> currentChords;
     std::atomic<bool> needsUIUpdate { false };
 
+    // Volume control (read by audio thread, written by UI thread)
+    std::atomic<float> masterVolume { 0.75f };
+    std::atomic<bool>  isMuted { false };
+
+    // Instrument selection (0=Synth, 1=Piano, 2=E-Piano, 3=Guitar)
+    std::atomic<int> currentInstrument { 0 };
+
 private:
     // Lock-free pitch class tracking (12-bit bitmask, bit N = pitch class N active)
     std::atomic<uint16_t> accumulatedBits { 0 };

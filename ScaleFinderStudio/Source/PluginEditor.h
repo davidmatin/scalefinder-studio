@@ -74,6 +74,7 @@ private:
     int hoveredCardIndex = -1;
     int majorCount = 0;
     float separatorY = 0.0f;
+    bool isRelativePair = false;
 
     static constexpr float chipHeight = 28.0f;
     static constexpr float chipGap = 4.0f;
@@ -285,6 +286,93 @@ private:
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (OptionsPopup)
 };
 
+// ── Volume knob (neumorphic rotary control with mute toggle) ─────────
+class VolumeKnob : public juce::Component,
+                   public juce::SettableTooltipClient
+{
+public:
+    VolumeKnob();
+    void paint (juce::Graphics&) override;
+    void mouseDown (const juce::MouseEvent&) override;
+    void mouseUp (const juce::MouseEvent&) override;
+    void mouseDrag (const juce::MouseEvent&) override;
+    void mouseDoubleClick (const juce::MouseEvent&) override;
+    void mouseWheelMove (const juce::MouseEvent&, const juce::MouseWheelDetails&) override;
+
+    float getValue() const { return volume; }
+    void  setValue (float v) { volume = juce::jlimit (0.0f, 1.0f, v); repaint(); }
+    bool  isMuted() const { return muted; }
+    void  setMuted (bool m) { muted = m; repaint(); }
+
+    std::function<void()> onValueChange;
+    std::function<void()> onMuteToggle;
+
+private:
+    float volume = 0.75f;
+    bool  muted = false;
+    float dragStartValue = 0.0f;
+    bool  clickedCenter = false;
+
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (VolumeKnob)
+};
+
+// ── Instrument selector button (neumorphic pill showing current name) ──
+class InstrumentButton : public juce::Component,
+                         public juce::SettableTooltipClient
+{
+public:
+    InstrumentButton();
+    void paint (juce::Graphics&) override;
+    void mouseDown (const juce::MouseEvent&) override;
+    void mouseEnter (const juce::MouseEvent&) override;
+    void mouseExit (const juce::MouseEvent&) override;
+
+    void setPopupOpen (bool open) { popupOpen = open; repaint(); }
+    bool isPopupOpen() const { return popupOpen; }
+    void setSelectedIndex (int index) { selectedIndex = index; repaint(); }
+    int  getSelectedIndex() const { return selectedIndex; }
+
+    std::function<void()> onClick;
+
+    static constexpr const char* shortNames[] = { "Synth", "Piano", "E-Piano", "Guitar" };
+
+private:
+    int  selectedIndex = 0;
+    bool hovered = false;
+    bool popupOpen = false;
+
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (InstrumentButton)
+};
+
+// ── Instrument popup (dark dropdown with 4 instrument choices) ──────
+class InstrumentPopup : public juce::Component
+{
+public:
+    InstrumentPopup();
+    void paint (juce::Graphics&) override;
+    void mouseDown (const juce::MouseEvent&) override;
+    void mouseMove (const juce::MouseEvent&) override;
+    void mouseExit (const juce::MouseEvent&) override;
+
+    void setSelectedIndex (int index) { selectedIndex = index; repaint(); }
+    std::function<void (int)> onItemSelected;
+
+private:
+    struct MenuItem {
+        juce::String text;
+        int instrumentId;
+        juce::Rectangle<float> bounds;
+    };
+    std::vector<MenuItem> items;
+    int hoveredIndex = -1;
+    int selectedIndex = 0;
+
+    int getItemAtPosition (juce::Point<float> pos) const;
+    void buildItems();
+
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (InstrumentPopup)
+};
+
 // ── Main editor ──────────────────────────────────────────────────────
 class ScaleFinderEditor : public juce::AudioProcessorEditor,
                           public juce::FileDragAndDropTarget,
@@ -320,16 +408,21 @@ private:
     void dismissKeyGridPopup();
     void showOptionsPopup();
     void dismissOptionsPopup();
+    void showInstrumentPopup();
+    void dismissInstrumentPopup();
     void openFileBrowser();
 
     ScaleFinderProcessor& processorRef;
 
     // ── UI components ─────────────────────────────────────────────────
     PianoKeyboard pianoKeyboard;
+    VolumeKnob volumeKnob;
+    InstrumentButton instrumentButton;
     juce::TextButton resetButton { "reset" };
     juce::TextButton keyDropdown { "select key..." };
     std::unique_ptr<KeyGridPopup> keyGridPopup;
     std::unique_ptr<OptionsPopup> optionsPopup;
+    std::unique_ptr<InstrumentPopup> instrumentPopup;
     juce::Label titleLabel1, titleLabel2;
 
     // ── Scale results ─────────────────────────────────────────────────
