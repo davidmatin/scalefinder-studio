@@ -176,6 +176,15 @@ public:
     void drawButtonText (juce::Graphics&, juce::TextButton&, bool, bool) override;
 };
 
+// ── BPM pill LookAndFeel: centered text, no dropdown arrow ──────────
+class BpmPillLookAndFeel : public juce::LookAndFeel_V4
+{
+public:
+    void drawButtonBackground (juce::Graphics&, juce::Button&,
+                               const juce::Colour&, bool, bool) override;
+    void drawButtonText (juce::Graphics&, juce::TextButton&, bool, bool) override;
+};
+
 // ── Invisible button LookAndFeel (no-op paint) ──────────────────────
 class InvisibleButtonLookAndFeel : public juce::LookAndFeel_V4
 {
@@ -470,6 +479,8 @@ private:
     ResetButtonLookAndFeel resetButtonLF;
     InvisibleButtonLookAndFeel invisibleButtonLF;
     BrowseIconLookAndFeel browseIconLF;
+    BpmPillLookAndFeel bpmPillLF;
+    juce::TextButton bpmPill { "\xe2\x80\x93 BPM" };  // "– BPM" placeholder
 
     // ── Computer keyboard MIDI toggle ────────────────────────────────────
     juce::TextButton* keyboardToggleButton = nullptr;

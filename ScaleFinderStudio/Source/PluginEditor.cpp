@@ -209,6 +209,25 @@ void BrowseIconLookAndFeel::drawButtonText (juce::Graphics& g, juce::TextButton&
     g.strokePath (folder, juce::PathStrokeType (1.3f));
 }
 
+// ── BPM pill LookAndFeel ─────────────────────────────────────────────────
+void BpmPillLookAndFeel::drawButtonBackground (juce::Graphics& g, juce::Button& button,
+                                                const juce::Colour&, bool, bool)
+{
+    auto bounds = button.getLocalBounds().toFloat().reduced (0.5f);
+    auto borderCol = button.findColour (juce::ComboBox::outlineColourId);
+    drawNeumorphicPill (g, bounds, borderCol);
+}
+
+void BpmPillLookAndFeel::drawButtonText (juce::Graphics& g, juce::TextButton& button,
+                                          bool, bool)
+{
+    auto textCol = button.findColour (juce::TextButton::textColourOffId);
+    g.setColour (textCol);
+    g.setFont (juce::FontOptions (13.0f));
+    g.drawText (button.getButtonText(), button.getLocalBounds(),
+                juce::Justification::centred);
+}
+
 void OptionsIconLookAndFeel::drawButtonBackground (juce::Graphics&, juce::Button&,
                                                      const juce::Colour&, bool, bool) {}
 
@@ -2323,6 +2342,10 @@ ScaleFinderEditor::ScaleFinderEditor (ScaleFinderProcessor& p)
         processorRef.clearNotes();
         pianoKeyboard.clearSelection();
         keyDropdown.setButtonText ("select key...");
+        bpmPill.setButtonText ("\xe2\x80\x93 BPM");
+        bpmPill.setColour (juce::TextButton::textColourOffId, Theme::textMuted());
+        bpmPill.setColour (juce::ComboBox::outlineColourId,   juce::Colour (0x0fffffff));
+        bpmPill.repaint();
         dismissKeyGridPopup();
         currentAlternatives.clear();
         altKeyButton1.setVisible (false);
@@ -2386,6 +2409,14 @@ ScaleFinderEditor::ScaleFinderEditor (ScaleFinderProcessor& p)
     browseIconButton.onClick = [this]() { openFileBrowser(); };
     addAndMakeVisible (browseIconButton);
 
+    // ── BPM pill (read-only indicator, populated after analysis) ─────────
+    bpmPill.setLookAndFeel (&bpmPillLF);
+    bpmPill.setColour (juce::TextButton::buttonColourId,  juce::Colour (0x00000000));
+    bpmPill.setColour (juce::TextButton::textColourOffId, Theme::textMuted());
+    bpmPill.setColour (juce::ComboBox::outlineColourId,   juce::Colour (0x0fffffff));
+    bpmPill.setInterceptsMouseClicks (false, false);
+    addAndMakeVisible (bpmPill);
+
     // ── Instrument selector (neumorphic circle, opens popup) ───────────
     instrumentButton.setSelectedIndex (processorRef.currentInstrument.load (std::memory_order_relaxed));
     instrumentButton.onClick = [this]() { showInstrumentPopup(); };
@@ -2433,6 +2464,7 @@ ScaleFinderEditor::~ScaleFinderEditor()
     keyDropdown.setLookAndFeel (nullptr);
     browseButton.setLookAndFeel (nullptr);
     browseIconButton.setLookAndFeel (nullptr);
+    bpmPill.setLookAndFeel (nullptr);
     dismissKeyGridPopup();
     dismissOptionsPopup();
     dismissInstrumentPopup();
@@ -2740,18 +2772,20 @@ void ScaleFinderEditor::resized()
     // ── Controls row (secondary — compact, side by side) ─────────────
     int controlsY = pianoY + pianoH + 12;
     int controlsH = 32;
+    int bpmW = 80;
     int resetW = 72;
     int browseW = 32;
     int instW = 72;
     int volW = 32;
     int gap = 8;
-    int dropdownW = w - margin * 2 - browseW - resetW - instW - volW - gap * 4;
+    int dropdownW = w - margin * 2 - bpmW - browseW - resetW - instW - volW - gap * 5;
 
-    keyDropdown.setBounds (margin, controlsY, dropdownW, controlsH);
-    browseIconButton.setBounds (margin + dropdownW + gap, controlsY, browseW, controlsH);
-    resetButton.setBounds (margin + dropdownW + gap + browseW + gap, controlsY, resetW, controlsH);
-    instrumentButton.setBounds (margin + dropdownW + gap + browseW + gap + resetW + gap, controlsY, instW, controlsH);
-    volumeKnob.setBounds (w - margin - volW, controlsY, volW, controlsH);
+    keyDropdown.setBounds      (margin, controlsY, dropdownW, controlsH);
+    bpmPill.setBounds          (margin + dropdownW + gap, controlsY, bpmW, controlsH);
+    browseIconButton.setBounds (margin + dropdownW + gap + bpmW + gap, controlsY, browseW, controlsH);
+    resetButton.setBounds      (margin + dropdownW + gap + bpmW + gap + browseW + gap, controlsY, resetW, controlsH);
+    instrumentButton.setBounds (margin + dropdownW + gap + bpmW + gap + browseW + gap + resetW + gap, controlsY, instW, controlsH);
+    volumeKnob.setBounds       (w - margin - volW, controlsY, volW, controlsH);
 
     // ── Results viewport (scrollable card list) ───────────────────────
     int resultsY = controlsY + controlsH + 12;
@@ -2836,6 +2870,23 @@ void ScaleFinderEditor::timerCallback()
             altKeyButton1.setVisible (false);
             altKeyButton2.setVisible (false);
         }
+
+        // Update BPM pill
+        float bpm = audioAnalyzer.getDetectedBPM();
+        if (bpm >= 60.0f && bpm <= 200.0f)
+        {
+            bpmPill.setButtonText (juce::String ((int) std::round (bpm)) + " BPM");
+            bpmPill.setColour (juce::TextButton::textColourOffId, Theme::textPrimary());
+            bpmPill.setColour (juce::ComboBox::outlineColourId,   Theme::accent());
+        }
+        else
+        {
+            bpmPill.setButtonText ("\xe2\x80\x93 BPM");
+            bpmPill.setColour (juce::TextButton::textColourOffId, Theme::textMuted());
+            bpmPill.setColour (juce::ComboBox::outlineColourId,   juce::Colour (0x0fffffff));
+        }
+        bpmPill.repaint();
+
         updateUI();
     }
 
@@ -3277,6 +3328,10 @@ void ScaleFinderEditor::filesDropped (const juce::StringArray& files, int, int)
     processorRef.clearNotes();
     pianoKeyboard.clearSelection();
     keyDropdown.setButtonText ("select key...");
+    bpmPill.setButtonText ("\xe2\x80\x93 BPM");
+    bpmPill.setColour (juce::TextButton::textColourOffId, Theme::textMuted());
+    bpmPill.setColour (juce::ComboBox::outlineColourId,   juce::Colour (0x0fffffff));
+    bpmPill.repaint();
 
     analysisStatusText = "Analyzing...";
     updateChordsDisplay();
@@ -3303,6 +3358,10 @@ void ScaleFinderEditor::openFileBrowser()
             processorRef.clearNotes();
             pianoKeyboard.clearSelection();
             keyDropdown.setButtonText ("select key...");
+            bpmPill.setButtonText ("\xe2\x80\x93 BPM");
+            bpmPill.setColour (juce::TextButton::textColourOffId, Theme::textMuted());
+            bpmPill.setColour (juce::ComboBox::outlineColourId,   juce::Colour (0x0fffffff));
+            bpmPill.repaint();
 
             analysisStatusText = "Analyzing...";
             updateChordsDisplay();

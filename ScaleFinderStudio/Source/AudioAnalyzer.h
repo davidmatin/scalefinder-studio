@@ -25,6 +25,7 @@ public:
     };
     std::vector<AlternativeKey> getAlternativeKeys() const;
     juce::String getDetectedKeyName() const;
+    float getDetectedBPM() const;
 
     // Configurable settings
     int fftSize = 8192;                  // FFT size (must be power of 2)
@@ -45,6 +46,7 @@ private:
     std::set<int> detectedPitchClasses;
     juce::String detectedKeyName;
     std::vector<AlternativeKey> alternativeKeys;
+    float detectedBPM = 0.0f;
     std::atomic<bool> analysisComplete { false };
     mutable juce::CriticalSection resultLock;
 };

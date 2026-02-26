@@ -40,6 +40,7 @@ void AudioAnalyzer::analyzeFile (const juce::File& audioFile, double hostSampleR
         const juce::ScopedLock sl (resultLock);
         detectedPitchClasses.clear();
         alternativeKeys.clear();
+        detectedBPM = 0.0f;
     }
 
     startThread();
@@ -66,6 +67,12 @@ juce::String AudioAnalyzer::getDetectedKeyName() const
 {
     const juce::ScopedLock sl (resultLock);
     return detectedKeyName;
+}
+
+float AudioAnalyzer::getDetectedBPM() const
+{
+    const juce::ScopedLock sl (resultLock);
+    return detectedBPM;
 }
 
 int AudioAnalyzer::hzToMidi (float hz)
@@ -410,6 +417,61 @@ void AudioAnalyzer::run()
 
     DBG ("AudioAnalyzer: Detected " + juce::String ((int) result.size()) + " pitch classes from "
          + fileToAnalyze.getFileName());
+
+    // ── 8.5. BPM detection via onset autocorrelation ─────────────────────
+    float bpm = 0.0f;
+    {
+        const int bpmHop = 512;
+        int numFrames = analysisSampleCount / bpmHop;
+
+        if (numFrames > 16 && !threadShouldExit())
+        {
+            // Build RMS energy envelope
+            std::vector<float> energy ((size_t) numFrames);
+            for (int f = 0; f < numFrames; ++f)
+            {
+                float rms = 0.0f;
+                const float* p = analysisSamples + f * bpmHop;
+                for (int s = 0; s < bpmHop; ++s)
+                    rms += p[s] * p[s];
+                energy[(size_t) f] = std::sqrt (rms / (float) bpmHop);
+            }
+
+            // Half-wave rectified first difference (onset strength)
+            int nOnset = numFrames - 1;
+            std::vector<float> onset ((size_t) nOnset);
+            for (int f = 0; f < nOnset; ++f)
+                onset[(size_t) f] = std::max (0.0f, energy[(size_t) (f + 1)] - energy[(size_t) f]);
+
+            // Autocorrelation: search lags in range 60–200 BPM
+            double sr = targetSampleRate;
+            int minLag = (int) std::ceil  (60.0 * sr / ((double) bpmHop * 200.0));
+            int maxLag = (int) std::floor (60.0 * sr / ((double) bpmHop *  60.0));
+            maxLag = std::min (maxLag, nOnset - 1);
+
+            float bestAC = 0.0f;
+            int   bestLag = 0;
+            for (int lag = minLag; lag <= maxLag; ++lag)
+            {
+                float ac = 0.0f;
+                int   count = nOnset - lag;
+                for (int i = 0; i < count; ++i)
+                    ac += onset[(size_t) i] * onset[(size_t) (i + lag)];
+                ac /= (float) count;
+                if (ac > bestAC) { bestAC = ac; bestLag = lag; }
+            }
+
+            if (bestLag > 0)
+                bpm = (float) (60.0 * sr / ((double) bpmHop * bestLag));
+        }
+
+        {
+            const juce::ScopedLock sl (resultLock);
+            detectedBPM = bpm;
+        }
+
+        DBG ("AudioAnalyzer: Detected BPM = " + juce::String (bpm, 1));
+    }
 
     analysisComplete.store (true);
 }
