@@ -418,51 +418,155 @@ void AudioAnalyzer::run()
     DBG ("AudioAnalyzer: Detected " + juce::String ((int) result.size()) + " pitch classes from "
          + fileToAnalyze.getFileName());
 
-    // ── 8.5. BPM detection via onset autocorrelation ─────────────────────
+    // ── 8.5. BPM detection via spectral flux ODF + autocorrelation ───────────
+    // Algorithm:
+    //  1. Spectral flux ODF (log-compressed magnitude differences per FFT bin)
+    //  2. Moving-average subtraction to remove DC/slow amplitude envelope
+    //  3. Autocorrelation with harmonic summation (AC(T) + 0.5*AC(2T) + 0.25*AC(3T))
+    //     reduces octave doubling/halving errors
+    //  4. Octave correction: if rawBPM < 80 or > 160, check adjacent octave
     float bpm = 0.0f;
     {
-        const int bpmHop = 512;
+        const int bpmFftSize = 2048;
+        const int bpmHop     = 512;
         int numFrames = analysisSampleCount / bpmHop;
 
-        if (numFrames > 16 && !threadShouldExit())
+        if (numFrames > 32 && !threadShouldExit())
         {
-            // Build RMS energy envelope
-            std::vector<float> energy ((size_t) numFrames);
-            for (int f = 0; f < numFrames; ++f)
+            // Lightweight FFT instance for onset detection
+            audiofft::AudioFFT bpmFft;
+            bpmFft.init ((size_t) bpmFftSize);
+            size_t bpmComplexSize = audiofft::AudioFFT::ComplexSize ((size_t) bpmFftSize);
+
+            // Pre-compute Hann window
+            std::vector<float> bpmWin ((size_t) bpmFftSize);
+            for (int i = 0; i < bpmFftSize; ++i)
+                bpmWin[(size_t) i] = 0.5f * (1.0f - std::cos (2.0f * (float) M_PI * i / (bpmFftSize - 1)));
+
+            std::vector<float> bpmBuf    ((size_t) bpmFftSize);
+            std::vector<float> bpmRe     ((size_t) bpmComplexSize);
+            std::vector<float> bpmIm     ((size_t) bpmComplexSize);
+            std::vector<float> prevLogMag ((size_t) bpmComplexSize, 0.0f);
+            std::vector<float> currLogMag ((size_t) bpmComplexSize);
+
+            // ── Stage 1: spectral flux (log-compressed) ─────────────────────
+            std::vector<float> onsetEnv ((size_t) numFrames, 0.0f);
+            const float kLog = 1000.0f;
+
+            for (int f = 0; f < numFrames && !threadShouldExit(); ++f)
             {
-                float rms = 0.0f;
-                const float* p = analysisSamples + f * bpmHop;
-                for (int s = 0; s < bpmHop; ++s)
-                    rms += p[s] * p[s];
-                energy[(size_t) f] = std::sqrt (rms / (float) bpmHop);
+                int offset    = f * bpmHop;
+                int available = std::min (bpmFftSize, analysisSampleCount - offset);
+
+                for (int i = 0; i < available; ++i)
+                    bpmBuf[(size_t) i] = analysisSamples[offset + i] * bpmWin[(size_t) i];
+                for (int i = available; i < bpmFftSize; ++i)
+                    bpmBuf[(size_t) i] = 0.0f;
+
+                bpmFft.fft (bpmBuf.data(), bpmRe.data(), bpmIm.data());
+
+                float flux = 0.0f;
+                for (size_t b = 0; b < bpmComplexSize; ++b)
+                {
+                    float mag    = std::sqrt (bpmRe[b] * bpmRe[b] + bpmIm[b] * bpmIm[b]);
+                    float logMag = std::log (1.0f + kLog * mag);
+                    currLogMag[b] = logMag;
+                    float diff = logMag - prevLogMag[b];
+                    if (diff > 0.0f) flux += diff;   // half-wave rectify
+                }
+                onsetEnv[(size_t) f] = flux;
+                std::swap (currLogMag, prevLogMag);
             }
 
-            // Half-wave rectified first difference (onset strength)
-            int nOnset = numFrames - 1;
-            std::vector<float> onset ((size_t) nOnset);
-            for (int f = 0; f < nOnset; ++f)
-                onset[(size_t) f] = std::max (0.0f, energy[(size_t) (f + 1)] - energy[(size_t) f]);
-
-            // Autocorrelation: search lags in range 60–200 BPM
-            double sr = targetSampleRate;
-            int minLag = (int) std::ceil  (60.0 * sr / ((double) bpmHop * 200.0));
-            int maxLag = (int) std::floor (60.0 * sr / ((double) bpmHop *  60.0));
-            maxLag = std::min (maxLag, nOnset - 1);
-
-            float bestAC = 0.0f;
-            int   bestLag = 0;
-            for (int lag = minLag; lag <= maxLag; ++lag)
+            if (!threadShouldExit())
             {
-                float ac = 0.0f;
-                int   count = nOnset - lag;
-                for (int i = 0; i < count; ++i)
-                    ac += onset[(size_t) i] * onset[(size_t) (i + lag)];
-                ac /= (float) count;
-                if (ac > bestAC) { bestAC = ac; bestLag = lag; }
-            }
+                // ── Stage 2: moving-average subtraction (prefix-sum O(n)) ───
+                int halfWin = std::max (1, (int) (targetSampleRate / bpmHop) / 2);
+                std::vector<float> prefix ((size_t) (numFrames + 1), 0.0f);
+                for (int f = 0; f < numFrames; ++f)
+                    prefix[(size_t) (f + 1)] = prefix[(size_t) f] + onsetEnv[(size_t) f];
 
-            if (bestLag > 0)
-                bpm = (float) (60.0 * sr / ((double) bpmHop * bestLag));
+                for (int f = 0; f < numFrames; ++f)
+                {
+                    int lo   = std::max (0, f - halfWin);
+                    int hi   = std::min (numFrames - 1, f + halfWin);
+                    float mn = (prefix[(size_t) (hi + 1)] - prefix[(size_t) lo])
+                               / (float) (hi - lo + 1);
+                    onsetEnv[(size_t) f] = std::max (0.0f, onsetEnv[(size_t) f] - mn);
+                }
+
+                // ── Stage 3: autocorrelation with harmonic summation ─────────
+                double sr  = targetSampleRate;
+                int minLag = std::max (1, (int) std::ceil  (60.0 * sr / ((double) bpmHop * 200.0)));
+                int maxLag = std::min (numFrames / 2,
+                                       (int) std::floor (60.0 * sr / ((double) bpmHop * 60.0)));
+
+                auto computeAC = [&] (int lag) -> float
+                {
+                    if (lag <= 0 || lag >= numFrames) return 0.0f;
+                    int   count = numFrames - lag;
+                    float ac    = 0.0f;
+                    for (int i = 0; i < count; ++i)
+                        ac += onsetEnv[(size_t) i] * onsetEnv[(size_t) (i + lag)];
+                    return ac / (float) count;
+                };
+
+                float bestScore = 0.0f;
+                int   bestLag   = 0;
+
+                for (int lag = minLag; lag <= maxLag; ++lag)
+                {
+                    float score = computeAC (lag);
+                    if (lag * 2 <= maxLag) score += 0.5f  * computeAC (lag * 2);
+                    if (lag * 3 <= maxLag) score += 0.25f * computeAC (lag * 3);
+                    if (score > bestScore) { bestScore = score; bestLag = lag; }
+                }
+
+                // ── Stage 4: octave correction ───────────────────────────────
+                if (bestLag > 0)
+                {
+                    float rawBPM = (float) (60.0 * sr / ((double) bpmHop * bestLag));
+
+                    if (rawBPM < 80.0f)
+                    {
+                        int halfLag = bestLag / 2;
+                        if (halfLag >= minLag)
+                        {
+                            float altScore = computeAC (halfLag);
+                            if (halfLag * 2 <= maxLag) altScore += 0.5f * computeAC (halfLag * 2);
+                            bpm = (altScore >= 0.5f * bestScore)
+                                ? (float) (60.0 * sr / ((double) bpmHop * halfLag))
+                                : rawBPM;
+                        }
+                        else
+                        {
+                            bpm = rawBPM * 2.0f;
+                        }
+                    }
+                    else if (rawBPM > 160.0f)
+                    {
+                        int doubleLag = bestLag * 2;
+                        if (doubleLag <= maxLag)
+                        {
+                            float altScore = computeAC (doubleLag);
+                            if (doubleLag * 2 <= maxLag) altScore += 0.5f * computeAC (doubleLag * 2);
+                            bpm = (altScore >= 0.5f * bestScore)
+                                ? (float) (60.0 * sr / ((double) bpmHop * doubleLag))
+                                : rawBPM;
+                        }
+                        else
+                        {
+                            bpm = rawBPM / 2.0f;
+                        }
+                    }
+                    else
+                    {
+                        bpm = rawBPM;
+                    }
+
+                    if (bpm < 60.0f || bpm > 200.0f) bpm = 0.0f;
+                }
+            }
         }
 
         {
