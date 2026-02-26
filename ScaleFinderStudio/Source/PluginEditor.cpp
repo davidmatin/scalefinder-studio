@@ -2875,7 +2875,7 @@ void ScaleFinderEditor::timerCallback()
         float bpm = audioAnalyzer.getDetectedBPM();
         if (bpm >= 60.0f && bpm <= 200.0f)
         {
-            bpmPill.setButtonText (juce::String ((int) std::round (bpm)) + " BPM");
+            bpmPill.setButtonText (juce::String (bpm, 1) + " BPM");
             bpmPill.setColour (juce::TextButton::textColourOffId, Theme::textPrimary());
             bpmPill.setColour (juce::ComboBox::outlineColourId,   Theme::accent());
         }

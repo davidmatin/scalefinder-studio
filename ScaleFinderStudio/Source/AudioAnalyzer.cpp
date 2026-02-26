@@ -495,88 +495,73 @@ void AudioAnalyzer::run()
                     onsetEnv[(size_t) f] = std::max (0.0f, onsetEnv[(size_t) f] - mn);
                 }
 
-                // ── Stage 3: autocorrelation with harmonic summation ─────────
-                double sr  = targetSampleRate;
-                int minLag = std::max (1, (int) std::ceil  (60.0 * sr / ((double) bpmHop * 200.0)));
-                int maxLag = std::min (numFrames / 2,
-                                       (int) std::floor (60.0 * sr / ((double) bpmHop * 60.0)));
+                // ── Stage 3: BPM-space search via fractional-lag AC ─────────
+                // Instead of testing integer lags (coarse, ~1.5 BPM steps at 87
+                // BPM), we test every 0.25 BPM directly. For each candidate BPM
+                // the lag is fractional; we interpolate the onset envelope linearly
+                // at that fractional position — this eliminates quantisation error
+                // completely (tests lag 59.379 for exactly 87 BPM rather than
+                // being forced to choose between lag 59 and lag 60).
+                double sr     = targetSampleRate;
+                float lagMaxF = (float) (60.0 * sr / ((double) bpmHop * 60.0));
 
-                auto computeAC = [&] (int lag) -> float
+                // Fractional-lag AC via linear interpolation of onset envelope
+                auto computeACfrac = [&] (float lagF) -> float
                 {
-                    if (lag <= 0 || lag >= numFrames) return 0.0f;
-                    int   count = numFrames - lag;
-                    float ac    = 0.0f;
+                    if (lagF < 1.0f || lagF >= (float) (numFrames - 1)) return 0.0f;
+                    int   lagI  = (int) lagF;
+                    float frac  = lagF - (float) lagI;
+                    int   count = numFrames - lagI - 1;
+                    if (count <= 0) return 0.0f;
+                    float ac = 0.0f;
                     for (int i = 0; i < count; ++i)
-                        ac += onsetEnv[(size_t) i] * onsetEnv[(size_t) (i + lag)];
+                    {
+                        float shifted = onsetEnv[(size_t) (i + lagI)]     * (1.0f - frac)
+                                      + onsetEnv[(size_t) (i + lagI + 1)] * frac;
+                        ac += onsetEnv[(size_t) i] * shifted;
+                    }
                     return ac / (float) count;
                 };
 
                 float bestScore = 0.0f;
-                int   bestLag   = 0;
+                float bestBPM   = 0.0f;
 
-                for (int lag = minLag; lag <= maxLag; ++lag)
+                for (float cBPM = 60.0f; cBPM <= 200.0f && !threadShouldExit(); cBPM += 0.25f)
                 {
-                    float score = computeAC (lag);
-                    if (lag * 2 <= maxLag) score += 0.5f  * computeAC (lag * 2);
-                    if (lag * 3 <= maxLag) score += 0.25f * computeAC (lag * 3);
-                    if (score > bestScore) { bestScore = score; bestLag = lag; }
+                    float lagF  = (float) (60.0 * sr / ((double) bpmHop * (double) cBPM));
+                    float score = computeACfrac (lagF);
+                    if (lagF * 2.0f <= lagMaxF) score += 0.5f  * computeACfrac (lagF * 2.0f);
+                    if (lagF * 3.0f <= lagMaxF) score += 0.25f * computeACfrac (lagF * 3.0f);
+                    if (score > bestScore) { bestScore = score; bestBPM = cBPM; }
                 }
 
                 // ── Stage 4: octave correction ───────────────────────────────
-                if (bestLag > 0)
+                if (bestBPM > 0.0f)
                 {
-                    // Parabolic interpolation for sub-frame lag resolution.
-                    // Fits a parabola to AC(L-1), AC(L), AC(L+1) and finds the
-                    // true fractional peak — eliminates ~1 BPM quantisation error
-                    // (e.g. true lag 59.4 frames → raw picks 60 → interp gives 59.5).
-                    double trueLag = bestLag;
-                    if (bestLag > minLag && bestLag < maxLag)
+                    auto scoreForBPM = [&] (float b) -> float
                     {
-                        float y1 = computeAC (bestLag - 1);
-                        float y2 = computeAC (bestLag);
-                        float y3 = computeAC (bestLag + 1);
-                        float denom = y1 - 2.0f * y2 + y3;
-                        if (std::abs (denom) > 1e-10f)
-                            trueLag = bestLag + 0.5f * (y1 - y3) / denom;
-                    }
+                        float lagF = (float) (60.0 * sr / ((double) bpmHop * (double) b));
+                        float s    = computeACfrac (lagF);
+                        if (lagF * 2.0f <= lagMaxF) s += 0.5f  * computeACfrac (lagF * 2.0f);
+                        if (lagF * 3.0f <= lagMaxF) s += 0.25f * computeACfrac (lagF * 3.0f);
+                        return s;
+                    };
 
-                    float rawBPM = (float) (60.0 * sr / ((double) bpmHop * trueLag));
-
-                    if (rawBPM < 80.0f)
+                    if (bestBPM < 80.0f)
                     {
-                        int halfLag = bestLag / 2;
-                        if (halfLag >= minLag)
-                        {
-                            float altScore = computeAC (halfLag);
-                            if (halfLag * 2 <= maxLag) altScore += 0.5f * computeAC (halfLag * 2);
-                            bpm = (altScore >= 0.5f * bestScore)
-                                ? (float) (60.0 * sr / ((double) bpmHop * halfLag))
-                                : rawBPM;
-                        }
-                        else
-                        {
-                            bpm = rawBPM * 2.0f;
-                        }
+                        float doubled = bestBPM * 2.0f;
+                        bpm = (doubled <= 200.0f && scoreForBPM (doubled) >= 0.5f * bestScore)
+                            ? doubled : bestBPM;
                     }
-                    else if (rawBPM > 160.0f)
+                    else if (bestBPM > 160.0f)
                     {
-                        int doubleLag = bestLag * 2;
-                        if (doubleLag <= maxLag)
-                        {
-                            float altScore = computeAC (doubleLag);
-                            if (doubleLag * 2 <= maxLag) altScore += 0.5f * computeAC (doubleLag * 2);
-                            bpm = (altScore >= 0.5f * bestScore)
-                                ? (float) (60.0 * sr / ((double) bpmHop * doubleLag))
-                                : rawBPM;
-                        }
-                        else
-                        {
-                            bpm = rawBPM / 2.0f;
-                        }
+                        float halved = bestBPM / 2.0f;
+                        bpm = (halved >= 60.0f && scoreForBPM (halved) >= 0.5f * bestScore)
+                            ? halved : bestBPM;
                     }
                     else
                     {
-                        bpm = rawBPM;
+                        bpm = bestBPM;
                     }
 
                     if (bpm < 60.0f || bpm > 200.0f) bpm = 0.0f;
