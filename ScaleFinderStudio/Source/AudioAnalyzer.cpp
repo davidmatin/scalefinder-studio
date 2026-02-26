@@ -525,7 +525,22 @@ void AudioAnalyzer::run()
                 // ── Stage 4: octave correction ───────────────────────────────
                 if (bestLag > 0)
                 {
-                    float rawBPM = (float) (60.0 * sr / ((double) bpmHop * bestLag));
+                    // Parabolic interpolation for sub-frame lag resolution.
+                    // Fits a parabola to AC(L-1), AC(L), AC(L+1) and finds the
+                    // true fractional peak — eliminates ~1 BPM quantisation error
+                    // (e.g. true lag 59.4 frames → raw picks 60 → interp gives 59.5).
+                    double trueLag = bestLag;
+                    if (bestLag > minLag && bestLag < maxLag)
+                    {
+                        float y1 = computeAC (bestLag - 1);
+                        float y2 = computeAC (bestLag);
+                        float y3 = computeAC (bestLag + 1);
+                        float denom = y1 - 2.0f * y2 + y3;
+                        if (std::abs (denom) > 1e-10f)
+                            trueLag = bestLag + 0.5f * (y1 - y3) / denom;
+                    }
+
+                    float rawBPM = (float) (60.0 * sr / ((double) bpmHop * trueLag));
 
                     if (rawBPM < 80.0f)
                     {
