@@ -41,6 +41,10 @@ void AudioAnalyzer::analyzeFile (const juce::File& audioFile, double hostSampleR
         detectedPitchClasses.clear();
         alternativeKeys.clear();
         detectedBPM = 0.0f;
+        detectedBPMConfidence = 0.0f;
+        songTitle.clear();
+        songArtist.clear();
+        coverArt = {};
     }
 
     startThread();
@@ -73,6 +77,128 @@ float AudioAnalyzer::getDetectedBPM() const
 {
     const juce::ScopedLock sl (resultLock);
     return detectedBPM;
+}
+
+float AudioAnalyzer::getDetectedBPMConfidence() const
+{
+    const juce::ScopedLock sl (resultLock);
+    return detectedBPMConfidence;
+}
+
+juce::String AudioAnalyzer::getSongTitle() const
+{
+    const juce::ScopedLock sl (resultLock);
+    return songTitle;
+}
+
+juce::String AudioAnalyzer::getSongArtist() const
+{
+    const juce::ScopedLock sl (resultLock);
+    return songArtist;
+}
+
+juce::Image AudioAnalyzer::getCoverArt() const
+{
+    const juce::ScopedLock sl (resultLock);
+    return coverArt;
+}
+
+// ── ID3v2 tag parser ─────────────────────────────────────────────────────
+AudioAnalyzer::SongMetadata AudioAnalyzer::parseID3v2Tags (const juce::File& file)
+{
+    SongMetadata meta;
+    auto stream = file.createInputStream();
+    if (stream == nullptr) return meta;
+
+    // Check for "ID3" header
+    char header[10];
+    if (stream->read (header, 10) != 10) return meta;
+    if (header[0] != 'I' || header[1] != 'D' || header[2] != '3') return meta;
+
+    int versionMajor = (unsigned char) header[3];  // 3 or 4
+    // Synchsafe tag size
+    uint32_t tagSize = ((uint32_t)(unsigned char)header[6] << 21)
+                     | ((uint32_t)(unsigned char)header[7] << 14)
+                     | ((uint32_t)(unsigned char)header[8] << 7)
+                     | ((uint32_t)(unsigned char)header[9]);
+
+    int64_t tagEnd = 10 + (int64_t) tagSize;
+
+    while (stream->getPosition() < tagEnd)
+    {
+        // Frame header: 4-byte ID, 4-byte size, 2-byte flags
+        char frameHeader[10];
+        if (stream->read (frameHeader, 10) != 10) break;
+
+        juce::String frameId (frameHeader, 4);
+        uint32_t frameSize;
+        if (versionMajor >= 4)
+        {
+            // v2.4: synchsafe frame size
+            frameSize = ((uint32_t)(unsigned char)frameHeader[4] << 21)
+                      | ((uint32_t)(unsigned char)frameHeader[5] << 14)
+                      | ((uint32_t)(unsigned char)frameHeader[6] << 7)
+                      | ((uint32_t)(unsigned char)frameHeader[7]);
+        }
+        else
+        {
+            // v2.3: regular big-endian
+            frameSize = ((uint32_t)(unsigned char)frameHeader[4] << 24)
+                      | ((uint32_t)(unsigned char)frameHeader[5] << 16)
+                      | ((uint32_t)(unsigned char)frameHeader[6] << 8)
+                      | ((uint32_t)(unsigned char)frameHeader[7]);
+        }
+
+        if (frameSize == 0 || frameSize > 10000000) break;  // sanity check
+
+        if (frameId == "TIT2" || frameId == "TPE1")
+        {
+            // Text frame: 1 byte encoding + text data
+            std::vector<char> data ((size_t) frameSize);
+            stream->read (data.data(), (int) frameSize);
+
+            unsigned char encoding = (unsigned char) data[0];
+            juce::String text;
+            if (encoding == 0) // ISO-8859-1
+                text = juce::String (data.data() + 1, frameSize - 1);
+            else if (encoding == 3) // UTF-8
+                text = juce::String::fromUTF8 (data.data() + 1, (int) frameSize - 1);
+            else if (encoding == 1 || encoding == 2) // UTF-16
+                text = juce::String (juce::CharPointer_UTF8 (data.data() + 1)); // best effort
+
+            if (frameId == "TIT2") meta.title = text.trim();
+            else                   meta.artist = text.trim();
+        }
+        else if (frameId == "APIC" && ! meta.artwork.isValid())
+        {
+            // Picture frame: encoding, MIME (null-terminated), pic type, description (null-terminated), image data
+            std::vector<uint8_t> data ((size_t) frameSize);
+            stream->read (data.data(), (int) frameSize);
+
+            size_t pos = 1; // skip encoding byte
+            // Skip MIME type string
+            while (pos < data.size() && data[pos] != 0) ++pos;
+            ++pos; // skip null
+            ++pos; // skip picture type byte
+            // Skip description
+            while (pos < data.size() && data[pos] != 0) ++pos;
+            ++pos; // skip null
+
+            if (pos < data.size())
+            {
+                auto img = juce::ImageFileFormat::loadFrom (data.data() + pos,
+                                                            data.size() - pos);
+                if (img.isValid())
+                    meta.artwork = img.rescaled (72, 72, juce::Graphics::mediumResamplingQuality);
+            }
+        }
+        else
+        {
+            stream->setPosition (stream->getPosition() + (int64_t) frameSize);
+        }
+    }
+
+    return meta;
 }
 
 int AudioAnalyzer::hzToMidi (float hz)
@@ -122,6 +248,33 @@ void AudioAnalyzer::run()
         DBG ("AudioAnalyzer: Could not read file: " + fileToAnalyze.getFullPathName());
         analysisComplete.store (true);
         return;
+    }
+
+    if (threadShouldExit()) return;
+
+    // ── 1b. Extract song metadata (ID3 tags) ────────────────────────────
+    {
+        auto meta = parseID3v2Tags (fileToAnalyze);
+
+        // Fallback: try JUCE reader metadata (works for WAV/AIFF/OGG)
+        if (meta.title.isEmpty())
+            meta.title = reader->metadataValues.getValue ("id3title", "");
+        if (meta.artist.isEmpty())
+            meta.artist = reader->metadataValues.getValue ("id3artist", "");
+        // Also try generic keys
+        if (meta.title.isEmpty())
+            meta.title = reader->metadataValues.getValue ("Title", "");
+        if (meta.artist.isEmpty())
+            meta.artist = reader->metadataValues.getValue ("Artist", "");
+
+        // Fallback: use filename as title
+        if (meta.title.isEmpty())
+            meta.title = fileToAnalyze.getFileNameWithoutExtension();
+
+        const juce::ScopedLock sl (resultLock);
+        songTitle  = meta.title;
+        songArtist = meta.artist;
+        coverArt   = meta.artwork;
     }
 
     if (threadShouldExit()) return;
@@ -418,14 +571,22 @@ void AudioAnalyzer::run()
     DBG ("AudioAnalyzer: Detected " + juce::String ((int) result.size()) + " pitch classes from "
          + fileToAnalyze.getFileName());
 
-    // ── 8.5. BPM detection via spectral flux ODF + autocorrelation ───────────
-    // Algorithm:
-    //  1. Spectral flux ODF (log-compressed magnitude differences per FFT bin)
-    //  2. Moving-average subtraction to remove DC/slow amplitude envelope
-    //  3. Autocorrelation with harmonic summation (AC(T) + 0.5*AC(2T) + 0.25*AC(3T))
-    //     reduces octave doubling/halving errors
-    //  4. Octave correction: if rawBPM < 80 or > 160, check adjacent octave
+    // ── 8.5. BPM detection: multi-band spectral flux ODF + fractional-lag AC ─
+    // Based on Scheirer (1998): run the same analysis on three frequency bands
+    // (full spectrum, bass 50-300 Hz, mid 300-2000 Hz) and vote across bands.
+    //
+    // Per-band algorithm:
+    //  1. Spectral flux ODF (log-compressed magnitude diff, per-band FFT bins)
+    //  2. Moving-average subtraction to remove DC / slow amplitude envelope
+    //  3. Fractional-lag AC (0.25 BPM steps) with 4-harmonic weighting:
+    //       AC(T) + 0.5*AC(2T) + 0.25*AC(3T) + 0.125*AC(4T)
+    //  4. Extended BPM range 50-220; improved octave correction (checks ×0.5,
+    //     ×2 candidates and prefers 70-155 BPM natural range)
+    //
+    // Confidence: 1.0 = all 3 bands agree; 0.65 = 2 agree; 0.4 = bass only;
+    //             0.0 = no result
     float bpm = 0.0f;
+    float bpmConfidence = 0.0f;
     {
         const int bpmFftSize = 2048;
         const int bpmHop     = 512;
@@ -433,7 +594,6 @@ void AudioAnalyzer::run()
 
         if (numFrames > 32 && !threadShouldExit())
         {
-            // Lightweight FFT instance for onset detection
             audiofft::AudioFFT bpmFft;
             bpmFft.init ((size_t) bpmFftSize);
             size_t bpmComplexSize = audiofft::AudioFFT::ComplexSize ((size_t) bpmFftSize);
@@ -443,14 +603,26 @@ void AudioAnalyzer::run()
             for (int i = 0; i < bpmFftSize; ++i)
                 bpmWin[(size_t) i] = 0.5f * (1.0f - std::cos (2.0f * (float) M_PI * i / (bpmFftSize - 1)));
 
-            std::vector<float> bpmBuf    ((size_t) bpmFftSize);
-            std::vector<float> bpmRe     ((size_t) bpmComplexSize);
-            std::vector<float> bpmIm     ((size_t) bpmComplexSize);
+            std::vector<float> bpmBuf     ((size_t) bpmFftSize);
+            std::vector<float> bpmRe      ((size_t) bpmComplexSize);
+            std::vector<float> bpmIm      ((size_t) bpmComplexSize);
             std::vector<float> prevLogMag ((size_t) bpmComplexSize, 0.0f);
             std::vector<float> currLogMag ((size_t) bpmComplexSize);
 
-            // ── Stage 1: spectral flux (log-compressed) ─────────────────────
-            std::vector<float> onsetEnv ((size_t) numFrames, 0.0f);
+            // Frequency band boundaries (FFT bin indices)
+            // Bass: 50-300 Hz — contains kick drum / bass guitar (best BPM indicator)
+            // Mid:  300-2000 Hz — contains snare, hi-hat
+            int bassLow  = std::max (1,    (int) std::ceil  (50.0   * bpmFftSize / targetSampleRate));
+            int bassHigh = std::min ((int) bpmComplexSize - 1,
+                                     (int) std::floor (300.0  * bpmFftSize / targetSampleRate));
+            int midLow   =           (int) std::ceil  (300.0  * bpmFftSize / targetSampleRate);
+            int midHigh  = std::min ((int) bpmComplexSize - 1,
+                                     (int) std::floor (2000.0 * bpmFftSize / targetSampleRate));
+
+            // ── Stage 1: spectral flux per band (single FFT pass) ─────────────
+            std::vector<float> onsetFull ((size_t) numFrames, 0.0f);
+            std::vector<float> onsetBass ((size_t) numFrames, 0.0f);
+            std::vector<float> onsetMid  ((size_t) numFrames, 0.0f);
             const float kLog = 1000.0f;
 
             for (int f = 0; f < numFrames && !threadShouldExit(); ++f)
@@ -465,116 +637,213 @@ void AudioAnalyzer::run()
 
                 bpmFft.fft (bpmBuf.data(), bpmRe.data(), bpmIm.data());
 
-                float flux = 0.0f;
-                for (size_t b = 0; b < bpmComplexSize; ++b)
+                float fluxFull = 0.0f, fluxBass = 0.0f, fluxMid = 0.0f;
+                for (int b = 0; b < (int) bpmComplexSize; ++b)
                 {
-                    float mag    = std::sqrt (bpmRe[b] * bpmRe[b] + bpmIm[b] * bpmIm[b]);
+                    float mag    = std::sqrt (bpmRe[(size_t) b] * bpmRe[(size_t) b]
+                                           + bpmIm[(size_t) b] * bpmIm[(size_t) b]);
                     float logMag = std::log (1.0f + kLog * mag);
-                    currLogMag[b] = logMag;
-                    float diff = logMag - prevLogMag[b];
-                    if (diff > 0.0f) flux += diff;   // half-wave rectify
+                    currLogMag[(size_t) b] = logMag;
+                    float diff = logMag - prevLogMag[(size_t) b];
+                    if (diff > 0.0f)
+                    {
+                        fluxFull += diff;
+                        if (b >= bassLow && b <= bassHigh) fluxBass += diff;
+                        if (b >= midLow  && b <= midHigh)  fluxMid  += diff;
+                    }
                 }
-                onsetEnv[(size_t) f] = flux;
+                onsetFull[(size_t) f] = fluxFull;
+                onsetBass[(size_t) f] = fluxBass;
+                onsetMid [(size_t) f] = fluxMid;
                 std::swap (currLogMag, prevLogMag);
             }
 
             if (!threadShouldExit())
             {
-                // ── Stage 2: moving-average subtraction (prefix-sum O(n)) ───
-                int halfWin = std::max (1, (int) (targetSampleRate / bpmHop) / 2);
-                std::vector<float> prefix ((size_t) (numFrames + 1), 0.0f);
-                for (int f = 0; f < numFrames; ++f)
-                    prefix[(size_t) (f + 1)] = prefix[(size_t) f] + onsetEnv[(size_t) f];
+                double sr = targetSampleRate;
+                // lagMaxF: lag in frames for 50 BPM (extended lower bound)
+                float lagMaxF = (float) (60.0 * sr / ((double) bpmHop * 50.0));
 
-                for (int f = 0; f < numFrames; ++f)
+                // ── Stage 2+3+4 encapsulated as a lambda (reused per band) ──
+                // Takes onset envelope by value (modified in-place by Stage 2).
+                // Returns {finalBPM, peakSharpness 0-1}.
+                auto computeBPMFromEnv = [&] (std::vector<float> env) -> std::pair<float, float>
                 {
-                    int lo   = std::max (0, f - halfWin);
-                    int hi   = std::min (numFrames - 1, f + halfWin);
-                    float mn = (prefix[(size_t) (hi + 1)] - prefix[(size_t) lo])
-                               / (float) (hi - lo + 1);
-                    onsetEnv[(size_t) f] = std::max (0.0f, onsetEnv[(size_t) f] - mn);
-                }
+                    int n = (int) env.size();
 
-                // ── Stage 3: BPM-space search via fractional-lag AC ─────────
-                // Instead of testing integer lags (coarse, ~1.5 BPM steps at 87
-                // BPM), we test every 0.25 BPM directly. For each candidate BPM
-                // the lag is fractional; we interpolate the onset envelope linearly
-                // at that fractional position — this eliminates quantisation error
-                // completely (tests lag 59.379 for exactly 87 BPM rather than
-                // being forced to choose between lag 59 and lag 60).
-                double sr     = targetSampleRate;
-                float lagMaxF = (float) (60.0 * sr / ((double) bpmHop * 60.0));
-
-                // Fractional-lag AC via linear interpolation of onset envelope
-                auto computeACfrac = [&] (float lagF) -> float
-                {
-                    if (lagF < 1.0f || lagF >= (float) (numFrames - 1)) return 0.0f;
-                    int   lagI  = (int) lagF;
-                    float frac  = lagF - (float) lagI;
-                    int   count = numFrames - lagI - 1;
-                    if (count <= 0) return 0.0f;
-                    float ac = 0.0f;
-                    for (int i = 0; i < count; ++i)
+                    // Stage 2: moving-average subtraction (prefix-sum O(n))
+                    int halfWin = std::max (1, (int) (targetSampleRate / bpmHop) / 2);
+                    std::vector<float> prefix ((size_t) (n + 1), 0.0f);
+                    for (int f2 = 0; f2 < n; ++f2)
+                        prefix[(size_t) (f2 + 1)] = prefix[(size_t) f2] + env[(size_t) f2];
+                    for (int f2 = 0; f2 < n; ++f2)
                     {
-                        float shifted = onsetEnv[(size_t) (i + lagI)]     * (1.0f - frac)
-                                      + onsetEnv[(size_t) (i + lagI + 1)] * frac;
-                        ac += onsetEnv[(size_t) i] * shifted;
+                        int lo = std::max (0, f2 - halfWin);
+                        int hi = std::min (n - 1, f2 + halfWin);
+                        float mn = (prefix[(size_t) (hi + 1)] - prefix[(size_t) lo])
+                                   / (float) (hi - lo + 1);
+                        env[(size_t) f2] = std::max (0.0f, env[(size_t) f2] - mn);
                     }
-                    return ac / (float) count;
-                };
 
-                float bestScore = 0.0f;
-                float bestBPM   = 0.0f;
+                    // Stage 3: fractional-lag AC with 4-harmonic weighting
+                    // Interpolates envelope at fractional lag → eliminates quantisation error.
+                    auto computeACfrac = [&] (float lagF) -> float
+                    {
+                        if (lagF < 1.0f || lagF >= (float) (n - 1)) return 0.0f;
+                        int   lagI  = (int) lagF;
+                        float frac  = lagF - (float) lagI;
+                        int   count = n - lagI - 1;
+                        if (count <= 0) return 0.0f;
+                        float ac = 0.0f;
+                        for (int i = 0; i < count; ++i)
+                        {
+                            float shifted = env[(size_t) (i + lagI)]     * (1.0f - frac)
+                                          + env[(size_t) (i + lagI + 1)] * frac;
+                            ac += env[(size_t) i] * shifted;
+                        }
+                        return ac / (float) count;
+                    };
 
-                for (float cBPM = 60.0f; cBPM <= 200.0f && !threadShouldExit(); cBPM += 0.25f)
-                {
-                    float lagF  = (float) (60.0 * sr / ((double) bpmHop * (double) cBPM));
-                    float score = computeACfrac (lagF);
-                    if (lagF * 2.0f <= lagMaxF) score += 0.5f  * computeACfrac (lagF * 2.0f);
-                    if (lagF * 3.0f <= lagMaxF) score += 0.25f * computeACfrac (lagF * 3.0f);
-                    if (score > bestScore) { bestScore = score; bestBPM = cBPM; }
-                }
-
-                // ── Stage 4: octave correction ───────────────────────────────
-                if (bestBPM > 0.0f)
-                {
+                    // Compute 4-harmonic score for any BPM
                     auto scoreForBPM = [&] (float b) -> float
                     {
+                        if (b < 50.0f || b > 220.0f) return 0.0f;
                         float lagF = (float) (60.0 * sr / ((double) bpmHop * (double) b));
-                        float s    = computeACfrac (lagF);
-                        if (lagF * 2.0f <= lagMaxF) s += 0.5f  * computeACfrac (lagF * 2.0f);
-                        if (lagF * 3.0f <= lagMaxF) s += 0.25f * computeACfrac (lagF * 3.0f);
+                        float s = computeACfrac (lagF);
+                        if (lagF * 2.0f <= lagMaxF) s += 0.5f   * computeACfrac (lagF * 2.0f);
+                        if (lagF * 3.0f <= lagMaxF) s += 0.25f  * computeACfrac (lagF * 3.0f);
+                        if (lagF * 4.0f <= lagMaxF) s += 0.125f * computeACfrac (lagF * 4.0f);
                         return s;
                     };
 
-                    if (bestBPM < 80.0f)
+                    float bestScore  = 0.0f;
+                    float secondBest = 0.0f;
+                    float bestBPM    = 0.0f;
+
+                    // Extended search range: 50-220 BPM at 0.25 BPM steps
+                    for (float cBPM = 50.0f; cBPM <= 220.0f && !threadShouldExit(); cBPM += 0.25f)
                     {
-                        float doubled = bestBPM * 2.0f;
-                        bpm = (doubled <= 200.0f && scoreForBPM (doubled) >= 0.5f * bestScore)
-                            ? doubled : bestBPM;
-                    }
-                    else if (bestBPM > 160.0f)
-                    {
-                        float halved = bestBPM / 2.0f;
-                        bpm = (halved >= 60.0f && scoreForBPM (halved) >= 0.5f * bestScore)
-                            ? halved : bestBPM;
-                    }
-                    else
-                    {
-                        bpm = bestBPM;
+                        float score = scoreForBPM (cBPM);
+                        if (score > bestScore)
+                        {
+                            secondBest = bestScore;
+                            bestScore  = score;
+                            bestBPM    = cBPM;
+                        }
+                        else if (score > secondBest)
+                        {
+                            secondBest = score;
+                        }
                     }
 
-                    if (bpm < 60.0f || bpm > 200.0f) bpm = 0.0f;
+                    if (bestBPM == 0.0f || bestScore == 0.0f) return { 0.0f, 0.0f };
+
+                    // Peak sharpness: how much best score exceeds second-best (0-1)
+                    float sharpness = (secondBest > 0.0f)
+                        ? juce::jmin (1.0f, (bestScore - secondBest) / bestScore)
+                        : 1.0f;
+
+                    // Stage 4: improved octave correction
+                    // Check ×2 and ×0.5 candidates; prefer whichever falls in
+                    // the 70-155 BPM "natural" range without sacrificing accuracy.
+                    float candidateBPMs[3] = { bestBPM, bestBPM * 2.0f, bestBPM * 0.5f };
+                    float naturalBPM   = 0.0f;
+                    float naturalScore = 0.0f;
+
+                    for (int ci = 0; ci < 3; ++ci)
+                    {
+                        float cb = candidateBPMs[ci];
+                        if (cb >= 70.0f && cb <= 155.0f)
+                        {
+                            float cs = scoreForBPM (cb);
+                            if (cs > naturalScore) { naturalScore = cs; naturalBPM = cb; }
+                        }
+                    }
+
+                    float finalBPM = bestBPM;
+                    if (naturalBPM > 0.0f && naturalScore >= 0.45f * bestScore)
+                        finalBPM = naturalBPM;
+
+                    if (finalBPM < 50.0f || finalBPM > 220.0f) finalBPM = 0.0f;
+
+                    return { finalBPM, sharpness };
+                };
+
+                // Run analysis on all 3 bands
+                auto resultFull = computeBPMFromEnv (onsetFull);
+                auto resultBass = computeBPMFromEnv (onsetBass);
+                auto resultMid  = computeBPMFromEnv (onsetMid);
+
+                float bpmFull  = resultFull.first,  confFull  = resultFull.second;
+                float bpmBass  = resultBass.first,  confBass  = resultBass.second;
+                float bpmMid   = resultMid.first,   confMid   = resultMid.second;
+
+                DBG ("AudioAnalyzer: BPM estimates — Full:" + juce::String (bpmFull, 1)
+                     + " Bass:" + juce::String (bpmBass, 1)
+                     + " Mid:"  + juce::String (bpmMid,  1));
+
+                // ── Multi-band voting (agree = within 3%) ──────────────────
+                auto bpmMatch = [] (float a, float b2) -> bool
+                {
+                    if (a <= 0.0f || b2 <= 0.0f) return false;
+                    return std::abs (a - b2) / ((a + b2) * 0.5f) < 0.03f;
+                };
+
+                bool fullBassAgree = bpmMatch (bpmFull, bpmBass);
+                bool fullMidAgree  = bpmMatch (bpmFull, bpmMid);
+                bool bassMidAgree  = bpmMatch (bpmBass, bpmMid);
+                int  agreements    = (fullBassAgree ? 1 : 0) + (fullMidAgree ? 1 : 0) + (bassMidAgree ? 1 : 0);
+
+                if (agreements == 3)
+                {
+                    // All agree — weighted average by sharpness
+                    float totalConf = confFull + confBass + confMid;
+                    bpm = totalConf > 0.0f
+                        ? (bpmFull * confFull + bpmBass * confBass + bpmMid * confMid) / totalConf
+                        : (bpmFull + bpmBass + bpmMid) / 3.0f;
+                    bpmConfidence = 1.0f;
                 }
+                else if (fullBassAgree)
+                {
+                    bpm = (bpmFull + bpmBass) * 0.5f;
+                    bpmConfidence = 0.70f;
+                }
+                else if (fullMidAgree)
+                {
+                    bpm = (bpmFull + bpmMid) * 0.5f;
+                    bpmConfidence = 0.65f;
+                }
+                else if (bassMidAgree)
+                {
+                    bpm = (bpmBass + bpmMid) * 0.5f;
+                    bpmConfidence = 0.65f;
+                }
+                else if (bpmBass > 0.0f)
+                {
+                    // Bass band most reliable when bands disagree
+                    bpm = bpmBass;
+                    bpmConfidence = confBass * 0.45f;
+                }
+                else if (bpmFull > 0.0f)
+                {
+                    bpm = bpmFull;
+                    bpmConfidence = confFull * 0.40f;
+                }
+
+                // Round to nearest 0.5 BPM (avoid spurious sub-integer precision)
+                if (bpm > 0.0f)
+                    bpm = std::round (bpm * 2.0f) / 2.0f;
             }
         }
 
         {
             const juce::ScopedLock sl (resultLock);
             detectedBPM = bpm;
+            detectedBPMConfidence = bpmConfidence;
         }
 
-        DBG ("AudioAnalyzer: Detected BPM = " + juce::String (bpm, 1));
+        DBG ("AudioAnalyzer: BPM = " + juce::String (bpm, 1)
+             + " (confidence " + juce::String (bpmConfidence, 2) + ")");
     }
 
     analysisComplete.store (true);

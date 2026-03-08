@@ -26,6 +26,8 @@ void ScaleFinderProcessor::changeProgramName (int, const juce::String&) {}
 void ScaleFinderProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
     pianoSynth.prepareToPlay (sampleRate, samplesPerBlock);
+    currentSampleRate = sampleRate;
+    metronomeClickSamplesLeft.store (0, std::memory_order_relaxed);
 }
 
 void ScaleFinderProcessor::releaseResources() {}
@@ -74,11 +76,40 @@ void ScaleFinderProcessor::processBlock (juce::AudioBuffer<float>& buffer,
     // Render piano audio (includes both external + GUI MIDI)
     pianoSynth.renderNextBlock (buffer, midiMessages, 0, buffer.getNumSamples());
 
+    // Metronome click synthesis (for tap tempo popup — synthesised directly into the output)
+    {
+        int samplesLeft = metronomeClickSamplesLeft.load (std::memory_order_relaxed);
+        if (samplesLeft > 0)
+        {
+            float totalSamples = (float) (currentSampleRate * 0.06);   // 60 ms click
+            int   offset       = (int) totalSamples - samplesLeft;      // position inside click
+            int   toRender     = juce::jmin (samplesLeft, buffer.getNumSamples());
+
+            for (int s = 0; s < toRender; ++s)
+            {
+                float t     = (float) (offset + s) / totalSamples;
+                float click = std::cos (juce::MathConstants<float>::twoPi
+                                        * 880.0f * (float) (offset + s)
+                                        / (float) currentSampleRate)
+                              * std::exp (-t * 20.0f) * 0.4f;
+                for (int ch = 0; ch < buffer.getNumChannels(); ++ch)
+                    buffer.addSample (ch, s, click);
+            }
+            metronomeClickSamplesLeft.fetch_sub (toRender, std::memory_order_relaxed);
+        }
+    }
+
     // Apply master volume / mute
     float gain = isMuted.load (std::memory_order_relaxed) ? 0.0f
                                                           : masterVolume.load (std::memory_order_relaxed);
     if (gain != 1.0f)
         buffer.applyGain (gain);
+}
+
+void ScaleFinderProcessor::requestMetronomeClick()
+{
+    int clickSamples = (int) (currentSampleRate * 0.06);   // 60 ms
+    metronomeClickSamplesLeft.store (clickSamples, std::memory_order_release);
 }
 
 // ── UI-thread API (all called from message thread) ───────────────────────

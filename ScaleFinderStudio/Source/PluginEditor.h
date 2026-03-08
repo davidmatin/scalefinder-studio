@@ -4,6 +4,7 @@
 #include "AudioAnalyzer.h"
 #include "MusicTheory.h"
 #include <functional>
+#include <deque>
 
 class PianoKeyboard : public juce::Component
 {
@@ -40,6 +41,24 @@ private:
     static constexpr int blackKeyPositions[5] = { 0, 1, 3, 4, 5 };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PianoKeyboard)
+};
+
+// ── Song Info Display (album art + title/artist) ────────────────────────
+class SongInfoDisplay : public juce::Component
+{
+public:
+    SongInfoDisplay() = default;
+    void paint (juce::Graphics&) override;
+    void setSongInfo (const juce::String& title, const juce::String& artist, const juce::Image& art);
+    void clear();
+    bool hasInfo() const { return songTitle.isNotEmpty(); }
+
+private:
+    juce::String songTitle;
+    juce::String songArtist;
+    juce::Image  coverArt;
+
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SongInfoDisplay)
 };
 
 // ── Scale Results Panel (scrollable card list) ──────────────────────────
@@ -308,9 +327,51 @@ private:
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (OptionsPopup)
 };
 
+// ── Tap Tempo popup (right-click BPM pill) ────────────────────────────
+class TapTempoPopup : public juce::Component,
+                      private juce::Timer
+{
+public:
+    explicit TapTempoPopup (ScaleFinderProcessor& p);
+    void paint    (juce::Graphics&) override;
+    void resized  () override;
+    void mouseDown (const juce::MouseEvent&) override;
+    void mouseMove (const juce::MouseEvent&) override;
+    void mouseExit (const juce::MouseEvent&) override;
+
+    float getTappedBPM() const { return tappedBPM; }
+
+    std::function<void (float)> onApply;   // called with confirmed BPM
+    std::function<void()>       onClose;
+
+private:
+    void timerCallback() override;
+    void handleTap();
+
+    enum HitArea { kNone = 0, kTap, kNudgeMinus, kNudgePlus, kApply, kClose };
+    HitArea hitTestArea (juce::Point<float> pos) const;
+
+    ScaleFinderProcessor& processorRef;
+
+    float tappedBPM = 0.0f;
+    std::deque<double> tapTimes;   // juce::Time::getMillisecondCounterHiRes() values
+    float flashAlpha = 0.0f;       // 1.0 on tap → fades to 0 via timer
+    int   hoveredArea = 0;
+
+    // Cached layout bounds (set in resized)
+    juce::Rectangle<float> tapCircleBounds;
+    juce::Rectangle<float> nudgeMinusBounds;
+    juce::Rectangle<float> nudgePlusBounds;
+    juce::Rectangle<float> applyBounds;
+    juce::Rectangle<float> closeBounds;
+
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (TapTempoPopup)
+};
+
 // ── Volume knob (neumorphic rotary control with mute toggle) ─────────
 class VolumeKnob : public juce::Component,
-                   public juce::SettableTooltipClient
+                   public juce::SettableTooltipClient,
+                   private juce::Timer
 {
 public:
     VolumeKnob();
@@ -330,10 +391,15 @@ public:
     std::function<void()> onMuteToggle;
 
 private:
+    void timerCallback() override;
+    void showValueLabel();
+
     float volume = 0.75f;
     bool  muted = false;
     float dragStartValue = 0.0f;
     bool  clickedCenter = false;
+    float labelAlpha = 0.0f;       // 0 = hidden, 1 = fully visible
+    int   labelFadeTicks = 0;      // countdown ticks before fading
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (VolumeKnob)
 };
@@ -433,6 +499,9 @@ private:
     void showInstrumentPopup();
     void dismissInstrumentPopup();
     void openFileBrowser();
+    void updateBpmPillDisplay();
+    void showTapTempoPopup();
+    void dismissTapTempoPopup();
 
     ScaleFinderProcessor& processorRef;
 
@@ -450,6 +519,7 @@ private:
     // ── Scale results ─────────────────────────────────────────────────
     juce::Viewport resultsViewport;
     ScaleResultsPanel resultsPanel;
+    SongInfoDisplay songInfoDisplay;
 
     // ── Chord / status display (extracted from paint) ─────────────────
     ChordsDisplay chordsDisplay;
@@ -480,7 +550,9 @@ private:
     InvisibleButtonLookAndFeel invisibleButtonLF;
     BrowseIconLookAndFeel browseIconLF;
     BpmPillLookAndFeel bpmPillLF;
-    juce::TextButton bpmPill { "\xe2\x80\x93 BPM" };  // "– BPM" placeholder
+    juce::TextButton bpmPill { "tempo" };               // default label
+    float manualBPM = 0.0f;                           // User-entered override (0 = use analyzed)
+    std::unique_ptr<TapTempoPopup>    tapTempoPopup;  // Tap tempo popup (click pill)
 
     // ── Computer keyboard MIDI toggle ────────────────────────────────────
     juce::TextButton* keyboardToggleButton = nullptr;

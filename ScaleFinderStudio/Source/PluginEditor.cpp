@@ -614,6 +614,270 @@ void InstrumentPopup::mouseExit (const juce::MouseEvent&)
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// TapTempoPopup
+// ═══════════════════════════════════════════════════════════════════════════
+
+TapTempoPopup::TapTempoPopup (ScaleFinderProcessor& p) : processorRef (p)
+{
+    setMouseCursor (juce::MouseCursor::PointingHandCursor);
+    startTimerHz (30);
+}
+
+void TapTempoPopup::resized()
+{
+    float w = (float) getWidth();
+
+    closeBounds = juce::Rectangle<float> (w - 26.0f, 6.0f, 20.0f, 20.0f);
+
+    float circleSize = juce::jmin (w - 30.0f, 120.0f);
+    float cx = w * 0.5f;
+    tapCircleBounds = juce::Rectangle<float> (cx - circleSize * 0.5f, 36.0f,
+                                              circleSize, circleSize);
+
+    float nudgeY = tapCircleBounds.getBottom() + 12.0f;
+    float nudgeH = 24.0f;
+    float nudgeW = (w - 30.0f) * 0.5f - 4.0f;
+    nudgeMinusBounds = juce::Rectangle<float> (12.0f,                    nudgeY, nudgeW, nudgeH);
+    nudgePlusBounds  = juce::Rectangle<float> (12.0f + nudgeW + 8.0f,   nudgeY, nudgeW, nudgeH);
+
+    float applyY = nudgeY + nudgeH + 10.0f;
+    applyBounds = juce::Rectangle<float> (12.0f, applyY, w - 24.0f, 26.0f);
+}
+
+void TapTempoPopup::paint (juce::Graphics& g)
+{
+    auto b = getLocalBounds().toFloat();
+    float w = b.getWidth();
+
+    // ── Card background ────────────────────────────────────────────────
+    juce::Path card;
+    card.addRoundedRectangle (b.reduced (0.5f), 10.0f);
+    g.setColour (juce::Colour (0xff1A1D2E));
+    g.fillPath (card);
+    g.setColour (Theme::borderSubtle());
+    g.strokePath (card, juce::PathStrokeType (1.0f));
+
+    // ── Header ─────────────────────────────────────────────────────────
+    g.setFont (juce::FontOptions (10.0f, juce::Font::bold));
+    g.setColour (Theme::textMuted());
+    g.drawText ("TAP TEMPO", juce::Rectangle<float> (14.0f, 10.0f, w - 50.0f, 16.0f),
+                juce::Justification::centredLeft);
+
+    // Close X
+    {
+        auto col = hoveredArea == kClose ? Theme::textPrimary() : Theme::textMuted();
+        g.setColour (col);
+        float cx = closeBounds.getCentreX(), cy = closeBounds.getCentreY(), s = 4.0f;
+        g.drawLine (cx - s, cy - s, cx + s, cy + s, 1.5f);
+        g.drawLine (cx + s, cy - s, cx - s, cy + s, 1.5f);
+    }
+
+    // ── LED ring ───────────────────────────────────────────────────────
+    float cx    = tapCircleBounds.getCentreX();
+    float cy    = tapCircleBounds.getCentreY();
+    float radius = tapCircleBounds.getWidth() * 0.5f;
+
+    // Drop shadow
+    g.setColour (juce::Colour (0x30000000));
+    g.fillEllipse (cx - radius, cy - radius + 2.0f, radius * 2.0f, radius * 2.0f);
+
+    // Inset ring
+    {
+        float wellR = radius - 1.0f;
+        g.setColour (juce::Colour (0x30000000));
+        g.drawEllipse (cx - wellR - 0.5f, cy - wellR - 0.5f, wellR * 2.0f, wellR * 2.0f, 1.5f);
+        g.setColour (juce::Colour (0x10ffffff));
+        g.drawEllipse (cx - wellR + 0.5f, cy - wellR + 0.5f, wellR * 2.0f, wellR * 2.0f, 0.5f);
+    }
+
+    // 32 LED segments — full circle starting at 12 o'clock
+    constexpr int kSegs = 32;
+    float arcR      = radius - 3.0f;
+    float tickInner = arcR - 4.0f;
+    float tickOuter = arcR;
+
+    for (int i = 0; i < kSegs; ++i)
+    {
+        float angle = juce::MathConstants<float>::twoPi * (float) i / (float) kSegs
+                      - juce::MathConstants<float>::halfPi;
+        float cosA = std::cos (angle), sinA = std::sin (angle);
+        float x1 = cx + tickInner * cosA, y1 = cy + tickInner * sinA;
+        float x2 = cx + tickOuter * cosA, y2 = cy + tickOuter * sinA;
+
+        if (flashAlpha > 0.0f)
+        {
+            g.setColour (Theme::accentPurple().withAlpha (flashAlpha * 0.25f));
+            g.drawLine (x1, y1, x2, y2, 4.0f);
+            g.setColour (Theme::accentPurple().withAlpha (flashAlpha));
+        }
+        else
+        {
+            g.setColour (Theme::borderSubtle());
+        }
+        g.drawLine (x1, y1, x2, y2, 1.5f);
+    }
+
+    // ── Centre circle ──────────────────────────────────────────────────
+    float knobR      = radius * 0.62f;
+    bool  tapHovered = (hoveredArea == kTap);
+    {
+        juce::ColourGradient grad (
+            tapHovered ? juce::Colour (0xff2A2E48) : juce::Colour (0xff222638), cx, cy - knobR,
+            tapHovered ? juce::Colour (0xff1E2235) : juce::Colour (0xff191C2C), cx, cy + knobR,
+            false);
+        g.setGradientFill (grad);
+        g.fillEllipse (cx - knobR, cy - knobR, knobR * 2.0f, knobR * 2.0f);
+
+        auto borderCol = flashAlpha > 0.0f ? Theme::accentPurple().withAlpha (flashAlpha * 0.6f)
+                                           : Theme::borderFaint();
+        g.setColour (borderCol);
+        g.drawEllipse (cx - knobR, cy - knobR, knobR * 2.0f, knobR * 2.0f, 0.75f);
+    }
+
+    // ── BPM number or TAP hint ─────────────────────────────────────────
+    if (tappedBPM >= 50.0f)
+    {
+        g.setFont (juce::FontOptions (30.0f, juce::Font::bold));
+        g.setColour (Theme::textPrimary());
+        g.drawText (juce::String ((int) std::round (tappedBPM)),
+                    juce::Rectangle<float> (cx - knobR, cy - 22.0f, knobR * 2.0f, 34.0f),
+                    juce::Justification::centred);
+        g.setFont (juce::FontOptions (10.0f));
+        g.setColour (Theme::textMuted());
+        g.drawText ("BPM",
+                    juce::Rectangle<float> (cx - knobR, cy + 12.0f, knobR * 2.0f, 14.0f),
+                    juce::Justification::centred);
+    }
+    else
+    {
+        g.setFont (juce::FontOptions (16.0f, juce::Font::bold));
+        g.setColour (Theme::textMuted().withAlpha (tapHovered ? 0.9f : 0.6f));
+        g.drawText ("TAP",
+                    juce::Rectangle<float> (cx - knobR, cy - 10.0f, knobR * 2.0f, 20.0f),
+                    juce::Justification::centred);
+    }
+
+    // ── Nudge pills ────────────────────────────────────────────────────
+    auto drawPill = [&] (juce::Rectangle<float> bounds, const juce::String& label, bool hovered)
+    {
+        juce::Path pill;
+        pill.addRoundedRectangle (bounds.reduced (0.5f), bounds.getHeight() * 0.5f);
+        g.setColour (hovered ? juce::Colour (0xff2C3050) : juce::Colour (0xff1E2235));
+        g.fillPath (pill);
+        g.setColour (Theme::borderSubtle());
+        g.strokePath (pill, juce::PathStrokeType (0.75f));
+        g.setFont (juce::FontOptions (11.0f));
+        g.setColour (hovered ? Theme::textPrimary() : Theme::textSecondary());
+        g.drawText (label, bounds, juce::Justification::centred);
+    };
+
+    drawPill (nudgeMinusBounds, "- nudge", hoveredArea == kNudgeMinus);
+    drawPill (nudgePlusBounds,  "nudge +", hoveredArea == kNudgePlus);
+
+    // ── Apply button ───────────────────────────────────────────────────
+    {
+        bool hasValue    = (tappedBPM >= 50.0f);
+        bool applyHov    = (hoveredArea == kApply);
+        auto baseCol     = hasValue ? Theme::accentPurple() : juce::Colour (0xff2A2E45);
+        auto fillCol     = applyHov ? baseCol.brighter (0.15f) : baseCol;
+
+        juce::Path applyPill;
+        applyPill.addRoundedRectangle (applyBounds.reduced (0.5f), applyBounds.getHeight() * 0.5f);
+        g.setColour (fillCol);
+        g.fillPath (applyPill);
+        g.setFont (juce::FontOptions (11.5f, juce::Font::bold));
+        g.setColour (hasValue ? Theme::textPrimary() : Theme::textMuted());
+        g.drawText ("Apply Tempo", applyBounds, juce::Justification::centred);
+    }
+}
+
+void TapTempoPopup::timerCallback()
+{
+    if (flashAlpha > 0.0f)
+    {
+        flashAlpha = juce::jmax (0.0f, flashAlpha - 0.07f);  // fades in ~14 ticks ≈ 470 ms
+        repaint();
+    }
+}
+
+void TapTempoPopup::handleTap()
+{
+    double now = juce::Time::getMillisecondCounterHiRes();
+
+    // Reset if more than 3 s since the last tap (< ~20 BPM — clearly stopped)
+    if (!tapTimes.empty() && (now - tapTimes.back()) > 3000.0)
+        tapTimes.clear();
+
+    tapTimes.push_back (now);
+    if (tapTimes.size() > 8)
+        tapTimes.pop_front();
+
+    if (tapTimes.size() >= 2)
+    {
+        double totalInterval = tapTimes.back() - tapTimes.front();
+        double avgInterval   = totalInterval / (double) (tapTimes.size() - 1);
+        float  bpm           = (float) (60000.0 / avgInterval);
+        bpm = juce::jlimit (40.0f, 300.0f, bpm);
+        bpm = std::round (bpm * 2.0f) * 0.5f;   // round to nearest 0.5
+        tappedBPM = bpm;
+    }
+
+    flashAlpha = 1.0f;
+    processorRef.requestMetronomeClick();
+    repaint();
+}
+
+TapTempoPopup::HitArea TapTempoPopup::hitTestArea (juce::Point<float> pos) const
+{
+    if (closeBounds.contains (pos))     return kClose;
+    if (applyBounds.contains (pos))     return kApply;
+    if (nudgeMinusBounds.contains (pos)) return kNudgeMinus;
+    if (nudgePlusBounds.contains (pos))  return kNudgePlus;
+
+    float cx = tapCircleBounds.getCentreX();
+    float cy = tapCircleBounds.getCentreY();
+    float r  = tapCircleBounds.getWidth() * 0.5f * 0.62f;  // inner circle
+    if (pos.getDistanceFrom ({ cx, cy }) <= r) return kTap;
+
+    return kNone;
+}
+
+void TapTempoPopup::mouseDown (const juce::MouseEvent& e)
+{
+    switch (hitTestArea (e.position))
+    {
+        case kTap:
+            handleTap();
+            break;
+        case kNudgeMinus:
+            if (tappedBPM >= 41.0f) { tappedBPM -= 1.0f; repaint(); }
+            break;
+        case kNudgePlus:
+            if (tappedBPM >= 50.0f && tappedBPM < 300.0f) { tappedBPM += 1.0f; repaint(); }
+            break;
+        case kApply:
+            if (tappedBPM >= 50.0f && onApply) onApply (tappedBPM);
+            break;
+        case kClose:
+            if (onClose) onClose();
+            break;
+        default: break;
+    }
+}
+
+void TapTempoPopup::mouseMove (const juce::MouseEvent& e)
+{
+    int newArea = (int) hitTestArea (e.position);
+    if (newArea != hoveredArea) { hoveredArea = newArea; repaint(); }
+}
+
+void TapTempoPopup::mouseExit (const juce::MouseEvent&)
+{
+    hoveredArea = kNone;
+    repaint();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // VolumeKnob
 // ═══════════════════════════════════════════════════════════════════════════
 
@@ -700,15 +964,17 @@ void VolumeKnob::paint (juce::Graphics& g)
         g.drawEllipse (cx - knobR, cy - knobR, knobR * 2.0f, knobR * 2.0f, 0.75f);
     }
 
-    // ── Position dot (on center circle edge) ──────────────────────────
+    // ── Position dot (on center circle edge) — hidden when label is showing ──
+    if (labelAlpha < 0.5f)
     {
         float dotAngle = startAngle + volume * sweep;
         float dotR = knobR - 3.0f;
         float dotX = cx + dotR * std::cos (dotAngle);
         float dotY = cy + dotR * std::sin (dotAngle);
         float dotSize = 2.5f;
+        float dotAlpha = 1.0f - labelAlpha * 2.0f;  // smooth crossfade
 
-        g.setColour (muted ? Theme::textMuted() : Theme::accent());
+        g.setColour ((muted ? Theme::textMuted() : Theme::accent()).withAlpha (dotAlpha));
         g.fillEllipse (dotX - dotSize, dotY - dotSize, dotSize * 2.0f, dotSize * 2.0f);
     }
 
@@ -718,6 +984,16 @@ void VolumeKnob::paint (juce::Graphics& g)
         g.setColour (Theme::textMuted().withAlpha (0.6f));
         float strikeR = knobR * 0.55f;
         g.drawLine (cx - strikeR, cy + strikeR, cx + strikeR, cy - strikeR, 1.5f);
+    }
+
+    // ── Volume percentage label (fades in/out on change) ────────────
+    if (labelAlpha > 0.01f && ! muted)
+    {
+        int pct = (int) std::round (volume * 100.0f);
+        g.setColour (Theme::textSecondary().withAlpha (labelAlpha * 0.8f));
+        g.setFont (juce::FontOptions (8.0f));
+        g.drawText (juce::String (pct), cx - knobR, cy - 5.0f, knobR * 2.0f, 10,
+                    juce::Justification::centred);
     }
 }
 
@@ -754,6 +1030,7 @@ void VolumeKnob::mouseDrag (const juce::MouseEvent& e)
     if (newVal != volume)
     {
         volume = newVal;
+        showValueLabel();
         repaint();
         if (onValueChange) onValueChange();
     }
@@ -763,6 +1040,7 @@ void VolumeKnob::mouseDoubleClick (const juce::MouseEvent&)
 {
     volume = 0.75f;
     muted = false;
+    showValueLabel();
     repaint();
     if (onValueChange) onValueChange();
     if (onMuteToggle) onMuteToggle();
@@ -776,9 +1054,35 @@ void VolumeKnob::mouseWheelMove (const juce::MouseEvent&, const juce::MouseWheel
     if (newVal != volume)
     {
         volume = newVal;
+        showValueLabel();
         repaint();
         if (onValueChange) onValueChange();
     }
+}
+
+void VolumeKnob::showValueLabel()
+{
+    labelAlpha = 1.0f;
+    labelFadeTicks = 20;    // ~670ms hold at 30Hz timer
+    startTimerHz (30);
+}
+
+void VolumeKnob::timerCallback()
+{
+    if (labelFadeTicks > 0)
+    {
+        --labelFadeTicks;
+    }
+    else
+    {
+        labelAlpha -= 0.08f;
+        if (labelAlpha <= 0.0f)
+        {
+            labelAlpha = 0.0f;
+            stopTimer();
+        }
+    }
+    repaint();
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1201,6 +1505,71 @@ void PianoKeyboard::mouseExit (const juce::MouseEvent&)
 // ScaleResultsPanel
 // ═══════════════════════════════════════════════════════════════════════════
 
+// ── SongInfoDisplay ──────────────────────────────────────────────────────
+
+void SongInfoDisplay::paint (juce::Graphics& g)
+{
+    auto b = getLocalBounds().toFloat();
+    float artSize = b.getHeight() - 4.0f;
+    float textX = 8.0f;
+
+    if (coverArt.isValid())
+    {
+        auto artRect = juce::Rectangle<float> (2.0f, 2.0f, artSize, artSize);
+        g.drawImageWithin (coverArt, (int) artRect.getX(), (int) artRect.getY(),
+                           (int) artRect.getWidth(), (int) artRect.getHeight(),
+                           juce::RectanglePlacement::centred);
+        // Rounded corner mask via clipping path
+        g.setColour (Theme::cardBg());
+        juce::Path mask;
+        mask.addRoundedRectangle (artRect, 4.0f);
+        mask.setUsingNonZeroWinding (false);
+        juce::Path outer;
+        outer.addRectangle (artRect);
+        mask.addPath (outer);
+
+        textX = artRect.getRight() + 10.0f;
+    }
+
+    float textW = b.getWidth() - textX - 4.0f;
+
+    if (songArtist.isNotEmpty())
+    {
+        // Song title + artist
+        juce::String display = songTitle + "  -  " + songArtist;
+        g.setColour (Theme::textPrimary());
+        g.setFont (juce::FontOptions (12.0f, juce::Font::bold));
+        g.drawText (display, (int) textX, 0, (int) textW, getHeight(),
+                    juce::Justification::centredLeft, true);
+    }
+    else
+    {
+        g.setColour (Theme::textPrimary());
+        g.setFont (juce::FontOptions (12.0f, juce::Font::bold));
+        g.drawText (songTitle, (int) textX, 0, (int) textW, getHeight(),
+                    juce::Justification::centredLeft, true);
+    }
+}
+
+void SongInfoDisplay::setSongInfo (const juce::String& title, const juce::String& artist,
+                                    const juce::Image& art)
+{
+    songTitle  = title;
+    songArtist = artist;
+    coverArt   = art;
+    repaint();
+}
+
+void SongInfoDisplay::clear()
+{
+    songTitle.clear();
+    songArtist.clear();
+    coverArt = {};
+    repaint();
+}
+
+// ── ScaleResultsPanel ───────────────────────────────────────────────────
+
 ScaleResultsPanel::ScaleResultsPanel()
 {
     setInterceptsMouseClicks (true, false);
@@ -1284,50 +1653,33 @@ void ScaleResultsPanel::layoutCards (float availableWidth)
             secondaryIdx = 0;
         }
 
-        // If a key is selected, show both as full-width cards (no floating label)
-        if (selectedCardIdx >= 0)
+        // Side-by-side layout: primary left, secondary right
         {
             float y = 4.0f;
+            float hGap = 8.0f;
+            float rowH = cardPrimaryH;
 
-            // Primary: full-width card (larger)
-            cards[(size_t) primaryIdx].bounds = { 0.0f, y, availableWidth, cardPrimaryH };
-            y += cardPrimaryH + cardGap;
+            if (selectedCardIdx >= 0)
+            {
+                // Both as detail cards, side by side
+                float primaryW = (availableWidth - hGap) * 0.55f;
+                float secondaryW = availableWidth - primaryW - hGap;
+                cards[(size_t) primaryIdx].bounds   = { 0.0f, y, primaryW, rowH };
+                cards[(size_t) secondaryIdx].bounds = { primaryW + hGap, y, secondaryW, rowH };
+            }
+            else
+            {
+                // Both as pills, side by side
+                float primaryW = (availableWidth - hGap) * 0.55f;
+                float secondaryW = availableWidth - primaryW - hGap;
+                cards[(size_t) primaryIdx].bounds   = { 0.0f, y, primaryW, rowH };
+                cards[(size_t) secondaryIdx].bounds = { primaryW + hGap, y, secondaryW, rowH };
+            }
 
-            // Secondary: full-width card (standard) — "relative minor/major" shown as category label inside
-            cards[(size_t) secondaryIdx].bounds = { 0.0f, y, availableWidth, cardHeight };
-            y += cardHeight + 4.0f;
-
+            y += rowH + 4.0f;
             setSize ((int) availableWidth, juce::jmax ((int) y, 1));
             return;
         }
-
-        // No selection: both as centered chips with label between
-        float contentH = 32.0f + 1.0f + 13.0f + 1.0f + 28.0f;  // primary pill + gaps + label + secondary pill
-        float panelH = (float) getParentHeight();
-        if (panelH < contentH) panelH = contentH + 4.0f;
-        float topY = (panelH - contentH) * 0.5f;
-        float y = topY;
-
-        // Primary pill (slightly larger chip)
-        juce::Font pFont { juce::FontOptions (19.0f, juce::Font::bold) };
-        float pTextW = pFont.getStringWidthFloat (cards[(size_t) primaryIdx].displayText);
-        float pW = pTextW + 18.0f * 2.0f;
-        float pX = (availableWidth - pW) * 0.5f;
-        cards[(size_t) primaryIdx].bounds = { pX, y, pW, 32.0f };
-        y += 32.0f + 1.0f;
-
-        relLabelY = y;
-        y += 13.0f + 1.0f;
-
-        // Secondary pill
-        juce::Font sFont { juce::FontOptions (15.0f) };
-        float sTextW = sFont.getStringWidthFloat (cards[(size_t) secondaryIdx].displayText);
-        float sW = sTextW + 14.0f * 2.0f;
-        float sX = (availableWidth - sW) * 0.5f;
-        cards[(size_t) secondaryIdx].bounds = { sX, y, sW, 28.0f };
-
-        setSize ((int) availableWidth, juce::jmax ((int) panelH, 1));
-        return;
     }
 
     // ── Hybrid layout: card for selected key, chips for the rest ────────
@@ -1622,59 +1974,13 @@ void ScaleResultsPanel::paint (juce::Graphics& g)
             secondaryIdx = 0;
         }
 
-        if (selectedCardIdx >= 0)
-        {
-            // Selected: both as full-width detail cards
-            drawDetailCard (cards[(size_t) primaryIdx], primaryIdx, 19.0f);
+        // Both drawn as detail cards side by side
+        drawDetailCard (cards[(size_t) primaryIdx], primaryIdx, 17.0f);
 
-            // Secondary card with "RELATIVE MINOR"/"RELATIVE MAJOR" as category
-            juce::String relCategory = (cards[(size_t) secondaryIdx].key.type == "Major")
-                                           ? "RELATIVE MAJOR"
-                                           : "RELATIVE MINOR";
-            drawDetailCard (cards[(size_t) secondaryIdx], secondaryIdx, 17.0f, relCategory);
-        }
-        else
-        {
-            // No selection: both as pills (original relative pair style)
-            // Primary pill
-            {
-                auto& card = cards[(size_t) primaryIdx];
-                auto& r = card.bounds;
-                bool isHov = (primaryIdx == hoveredCardIndex);
-
-                g.setColour (isHov ? juce::Colour (0xff222238) : Theme::cardBg());
-                g.fillRoundedRectangle (r, 16.0f);
-                g.setColour (isHov ? Theme::accent().withAlpha (0.6f) : Theme::accent().withAlpha (0.3f));
-                g.drawRoundedRectangle (r.reduced (0.5f), 16.0f, 1.0f);
-                g.setColour (Theme::textPrimary());
-                g.setFont (juce::FontOptions (19.0f, juce::Font::bold));
-                g.drawText (card.displayText, r, juce::Justification::centred);
-            }
-
-            // Relationship label
-            juce::String label = (cards[(size_t) primaryIdx].key.type == "Major")
-                                     ? "relative minor"
-                                     : "relative major";
-            g.setColour (Theme::textSecondary().withAlpha (0.5f));
-            g.setFont (juce::FontOptions (11.0f));
-            g.drawText (label, 0, (int) relLabelY, getWidth(), 13,
-                        juce::Justification::centred);
-
-            // Secondary pill
-            {
-                auto& card = cards[(size_t) secondaryIdx];
-                auto& r = card.bounds;
-                bool isHov = (secondaryIdx == hoveredCardIndex);
-
-                g.setColour (isHov ? juce::Colour (0xff222238) : Theme::cardBg());
-                g.fillRoundedRectangle (r, 14.0f);
-                g.setColour (isHov ? Theme::accent().withAlpha (0.4f) : Theme::borderFaint());
-                g.drawRoundedRectangle (r.reduced (0.5f), 14.0f, 1.0f);
-                g.setColour (isHov ? Theme::textPrimary() : Theme::textSecondary());
-                g.setFont (juce::FontOptions (15.0f));
-                g.drawText (card.displayText, r, juce::Justification::centred);
-            }
-        }
+        juce::String relCategory = (cards[(size_t) secondaryIdx].key.type == "Major")
+                                       ? "RELATIVE MAJOR"
+                                       : "RELATIVE MINOR";
+        drawDetailCard (cards[(size_t) secondaryIdx], secondaryIdx, 15.0f, relCategory);
         return;
     }
 
@@ -2342,15 +2648,16 @@ ScaleFinderEditor::ScaleFinderEditor (ScaleFinderProcessor& p)
         processorRef.clearNotes();
         pianoKeyboard.clearSelection();
         keyDropdown.setButtonText ("select key...");
-        bpmPill.setButtonText ("\xe2\x80\x93 BPM");
-        bpmPill.setColour (juce::TextButton::textColourOffId, Theme::textMuted());
-        bpmPill.setColour (juce::ComboBox::outlineColourId,   juce::Colour (0x0fffffff));
-        bpmPill.repaint();
+        manualBPM = 0.0f;
+        dismissTapTempoPopup();
+        updateBpmPillDisplay();
         dismissKeyGridPopup();
         currentAlternatives.clear();
         altKeyButton1.setVisible (false);
         altKeyButton2.setVisible (false);
+        songInfoDisplay.clear();
         updateUI();
+        resized();
     };
     addAndMakeVisible (resetButton);
 
@@ -2368,6 +2675,8 @@ ScaleFinderEditor::ScaleFinderEditor (ScaleFinderProcessor& p)
     resultsViewport.setScrollBarThickness (6);
     resultsViewport.getVerticalScrollBar().setColour (juce::ScrollBar::thumbColourId, juce::Colour (0x40ffffff));
     addAndMakeVisible (resultsViewport);
+    songInfoDisplay.setVisible (false);
+    addAndMakeVisible (songInfoDisplay);
 
     // ── Alternative key suggestion buttons ──────────────────────────────
     auto setupAltButton = [this] (juce::TextButton& btn, int index) {
@@ -2409,12 +2718,14 @@ ScaleFinderEditor::ScaleFinderEditor (ScaleFinderProcessor& p)
     browseIconButton.onClick = [this]() { openFileBrowser(); };
     addAndMakeVisible (browseIconButton);
 
-    // ── BPM pill (read-only indicator, populated after analysis) ─────────
+    // ── BPM pill (click to enter BPM manually) ───────────────────────────
     bpmPill.setLookAndFeel (&bpmPillLF);
     bpmPill.setColour (juce::TextButton::buttonColourId,  juce::Colour (0x00000000));
     bpmPill.setColour (juce::TextButton::textColourOffId, Theme::textMuted());
     bpmPill.setColour (juce::ComboBox::outlineColourId,   juce::Colour (0x0fffffff));
-    bpmPill.setInterceptsMouseClicks (false, false);
+    bpmPill.setMouseCursor (juce::MouseCursor::PointingHandCursor);
+    bpmPill.setTooltip ("Tap tempo");
+    bpmPill.onClick = [this]() { showTapTempoPopup(); };
     addAndMakeVisible (bpmPill);
 
     // ── Instrument selector (neumorphic circle, opens popup) ───────────
@@ -2465,6 +2776,7 @@ ScaleFinderEditor::~ScaleFinderEditor()
     browseButton.setLookAndFeel (nullptr);
     browseIconButton.setLookAndFeel (nullptr);
     bpmPill.setLookAndFeel (nullptr);
+    dismissTapTempoPopup();
     dismissKeyGridPopup();
     dismissOptionsPopup();
     dismissInstrumentPopup();
@@ -2790,11 +3102,24 @@ void ScaleFinderEditor::resized()
     // ── Results viewport (scrollable card list) ───────────────────────
     int resultsY = controlsY + controlsH + 12;
     bool hasAlts = altKeyButton1.isVisible();
+    int songInfoH = songInfoDisplay.hasInfo() ? 40 : 0;
     int altRowH = hasAlts ? 26 : 0;
-    int resultsH = getHeight() - resultsY - altRowH - 8;
+    int resultsH = getHeight() - resultsY - songInfoH - altRowH - 8;
     resultsViewport.setBounds (margin, resultsY, w - margin * 2, juce::jmax (resultsH, 60));
     resultsPanel.setSize (resultsViewport.getWidth() - (resultsViewport.isVerticalScrollBarShown() ? 6 : 0),
                           resultsPanel.getHeight());
+
+    // ── Song info display (album art + title/artist) ────────────────
+    if (songInfoH > 0)
+    {
+        int songInfoY = resultsViewport.getBottom() + 2;
+        songInfoDisplay.setBounds (margin, songInfoY, w - margin * 2, songInfoH - 4);
+        songInfoDisplay.setVisible (true);
+    }
+    else
+    {
+        songInfoDisplay.setVisible (false);
+    }
 
     // ── Browse button (covers the empty state area) ──────────────────
     browseButton.setBounds (margin, resultsY, w - margin * 2, getHeight() - resultsY - 8);
@@ -2802,7 +3127,7 @@ void ScaleFinderEditor::resized()
     // ── Alternative key buttons (below results) ──────────────────────
     if (hasAlts)
     {
-        int altY = resultsViewport.getBottom() + 4;
+        int altY = (songInfoH > 0 ? songInfoDisplay.getBottom() : resultsViewport.getBottom()) + 4;
         int labelW = 46;   // "Also try:" label width (drawn by ChordsDisplay)
         int btnW = (w - margin * 2 - labelW - 8 - 8) / 2;  // two buttons, 8px gaps
         int btnH = 20;
@@ -2871,23 +3196,22 @@ void ScaleFinderEditor::timerCallback()
             altKeyButton2.setVisible (false);
         }
 
-        // Update BPM pill
-        float bpm = audioAnalyzer.getDetectedBPM();
-        if (bpm >= 60.0f && bpm <= 200.0f)
+        updateBpmPillDisplay();
+
+        // Display song metadata (title, artist, cover art)
         {
-            bpmPill.setButtonText (juce::String (bpm, 1) + " BPM");
-            bpmPill.setColour (juce::TextButton::textColourOffId, Theme::textPrimary());
-            bpmPill.setColour (juce::ComboBox::outlineColourId,   Theme::accent());
+            auto title  = audioAnalyzer.getSongTitle();
+            auto artist = audioAnalyzer.getSongArtist();
+            auto art    = audioAnalyzer.getCoverArt();
+
+            if (title.isNotEmpty())
+                songInfoDisplay.setSongInfo (title, artist, art);
+            else
+                songInfoDisplay.clear();
         }
-        else
-        {
-            bpmPill.setButtonText ("\xe2\x80\x93 BPM");
-            bpmPill.setColour (juce::TextButton::textColourOffId, Theme::textMuted());
-            bpmPill.setColour (juce::ComboBox::outlineColourId,   juce::Colour (0x0fffffff));
-        }
-        bpmPill.repaint();
 
         updateUI();
+        resized();  // re-layout with song info visible
     }
 
     // Update reset button outline: purple when hovered or focused
@@ -2924,6 +3248,24 @@ void ScaleFinderEditor::timerCallback()
         {
             browseIconButton.setColour (juce::ComboBox::outlineColourId, col);
             browseIconButton.repaint();
+        }
+    }
+
+    // Update BPM pill outline: purple when hovered
+    {
+        bool active = bpmPill.isOver() || bpmPill.hasKeyboardFocus (false);
+        if (active)
+        {
+            auto col = Theme::accent();
+            if (bpmPill.findColour (juce::ComboBox::outlineColourId) != col)
+            {
+                bpmPill.setColour (juce::ComboBox::outlineColourId, col);
+                bpmPill.repaint();
+            }
+        }
+        else
+        {
+            updateBpmPillDisplay();   // restore normal outline state
         }
     }
 
@@ -3257,6 +3599,21 @@ void ScaleFinderEditor::dismissInstrumentPopup()
 
 void ScaleFinderEditor::mouseDown (const juce::MouseEvent& e)
 {
+    // Right-click on BPM pill → tap tempo popup
+    if (e.eventComponent == &bpmPill && e.mods.isRightButtonDown())
+    {
+        showTapTempoPopup();
+        return;
+    }
+
+    // Dismiss tap tempo popup if click is outside it
+    if (tapTempoPopup != nullptr)
+    {
+        auto localPos = tapTempoPopup->getLocalPoint (this, e.position.toInt());
+        if (! tapTempoPopup->getLocalBounds().contains (localPos))
+            dismissTapTempoPopup();
+    }
+
     // Dismiss key grid popup if click is outside it
     if (keyGridPopup != nullptr)
     {
@@ -3328,15 +3685,93 @@ void ScaleFinderEditor::filesDropped (const juce::StringArray& files, int, int)
     processorRef.clearNotes();
     pianoKeyboard.clearSelection();
     keyDropdown.setButtonText ("select key...");
-    bpmPill.setButtonText ("\xe2\x80\x93 BPM");
-    bpmPill.setColour (juce::TextButton::textColourOffId, Theme::textMuted());
-    bpmPill.setColour (juce::ComboBox::outlineColourId,   juce::Colour (0x0fffffff));
-    bpmPill.repaint();
+    manualBPM = 0.0f;
+    dismissTapTempoPopup();
+    updateBpmPillDisplay();
 
     analysisStatusText = "Analyzing...";
     updateChordsDisplay();
 
     audioAnalyzer.analyzeFile (audioFile, processorRef.getAnalysisSampleRate());
+}
+
+// ── BPM pill manual-edit helpers ─────────────────────────────────────────
+
+void ScaleFinderEditor::updateBpmPillDisplay()
+{
+    // Priority: manual typed > analyzed > default
+    float displayBPM  = manualBPM > 0.0f ? manualBPM : audioAnalyzer.getDetectedBPM();
+    float bpmConf     = manualBPM > 0.0f ? 1.0f : audioAnalyzer.getDetectedBPMConfidence();
+    bool  isManual    = (manualBPM > 0.0f);
+
+    if (displayBPM >= 50.0f && displayBPM <= 220.0f)
+    {
+        juce::String bpmText = (bpmConf < 0.6f ? "~" : "")
+                               + juce::String ((int) std::round (displayBPM)) + " BPM";
+        bpmPill.setButtonText (bpmText);
+        bpmPill.setColour (juce::TextButton::textColourOffId, Theme::textPrimary());
+        // Purple border for manual entry, accent (indigo) for analyzed
+        auto outlineCol = isManual ? Theme::accentPurple()
+                                   : (bpmConf >= 0.6f ? Theme::accent()
+                                                      : Theme::accent().withAlpha (0.6f));
+        bpmPill.setColour (juce::ComboBox::outlineColourId, outlineCol);
+    }
+    else
+    {
+        bpmPill.setButtonText ("tempo");
+        bpmPill.setColour (juce::TextButton::textColourOffId, Theme::textSecondary());
+        bpmPill.setColour (juce::ComboBox::outlineColourId,   juce::Colour (0x0fffffff));
+    }
+    bpmPill.repaint();
+}
+
+void ScaleFinderEditor::showTapTempoPopup()
+{
+    // Toggle: second right-click closes it
+    if (tapTempoPopup != nullptr) { dismissTapTempoPopup(); return; }
+
+    tapTempoPopup = std::make_unique<TapTempoPopup> (processorRef);
+
+    // Size
+    constexpr int popW = 175, popH = 242;
+
+    // Position: above the bpmPill, horizontally centred on it
+    auto pillBounds = bpmPill.getBounds();
+    int popX = pillBounds.getCentreX() - popW / 2;
+    int popY = pillBounds.getY() - popH - 6;
+
+    // Flip to below if not enough room above
+    if (popY < 4)
+        popY = pillBounds.getBottom() + 6;
+
+    // Clamp to editor bounds
+    popX = juce::jlimit (4, getWidth()  - popW - 4, popX);
+    popY = juce::jlimit (4, getHeight() - popH - 4, popY);
+
+    tapTempoPopup->setBounds (popX, popY, popW, popH);
+
+    tapTempoPopup->onApply = [this] (float bpm)
+    {
+        manualBPM = bpm;
+        updateBpmPillDisplay();  // update pill before the popup object is destroyed
+        juce::MessageManager::callAsync (
+            [safeThis = juce::Component::SafePointer<ScaleFinderEditor> (this)]()
+            {
+                if (safeThis != nullptr)
+                    safeThis->dismissTapTempoPopup();
+            });
+    };
+    tapTempoPopup->onClose = [this]() { dismissTapTempoPopup(); };
+
+    addAndMakeVisible (*tapTempoPopup);
+    tapTempoPopup->toFront (false);
+}
+
+void ScaleFinderEditor::dismissTapTempoPopup()
+{
+    if (tapTempoPopup == nullptr) return;
+    removeChildComponent (tapTempoPopup.get());
+    tapTempoPopup.reset();
 }
 
 void ScaleFinderEditor::openFileBrowser()
@@ -3358,10 +3793,9 @@ void ScaleFinderEditor::openFileBrowser()
             processorRef.clearNotes();
             pianoKeyboard.clearSelection();
             keyDropdown.setButtonText ("select key...");
-            bpmPill.setButtonText ("\xe2\x80\x93 BPM");
-            bpmPill.setColour (juce::TextButton::textColourOffId, Theme::textMuted());
-            bpmPill.setColour (juce::ComboBox::outlineColourId,   juce::Colour (0x0fffffff));
-            bpmPill.repaint();
+            manualBPM = 0.0f;
+            dismissTapTempoPopup();
+            updateBpmPillDisplay();
 
             analysisStatusText = "Analyzing...";
             updateChordsDisplay();

@@ -86,6 +86,9 @@ public:
     void togglePitchClassOn (int pitchClass);
     void togglePitchClassOff (int pitchClass);
 
+    // Tap tempo metronome click (called from UI thread; synthesised in processBlock)
+    void requestMetronomeClick();
+
     // ── Lock-free bitmask accessors ──────────────────────────────────────
     uint16_t getAccumulatedBits() const { return accumulatedBits.load (std::memory_order_acquire); }
     void     setAccumulatedBits (uint16_t bits);
@@ -122,6 +125,10 @@ private:
     // Lock-free GUI→audio MIDI ring buffer
     MidiRingBuffer guiMidiRing;
     int lastGUINote = -1;
+
+    // Metronome click synthesis state
+    double currentSampleRate = 44100.0;
+    std::atomic<int> metronomeClickSamplesLeft { 0 };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ScaleFinderProcessor)
 };

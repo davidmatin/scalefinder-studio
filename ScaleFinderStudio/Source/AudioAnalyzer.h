@@ -26,6 +26,12 @@ public:
     std::vector<AlternativeKey> getAlternativeKeys() const;
     juce::String getDetectedKeyName() const;
     float getDetectedBPM() const;
+    float getDetectedBPMConfidence() const;  // 0.0 = uncertain, 1.0 = all bands agree
+
+    // Song metadata (extracted from ID3 / file tags)
+    juce::String getSongTitle() const;
+    juce::String getSongArtist() const;
+    juce::Image  getCoverArt() const;
 
     // Configurable settings
     int fftSize = 8192;                  // FFT size (must be power of 2)
@@ -47,6 +53,14 @@ private:
     juce::String detectedKeyName;
     std::vector<AlternativeKey> alternativeKeys;
     float detectedBPM = 0.0f;
+    float detectedBPMConfidence = 0.0f;
+    juce::String songTitle;
+    juce::String songArtist;
+    juce::Image  coverArt;
     std::atomic<bool> analysisComplete { false };
     mutable juce::CriticalSection resultLock;
+
+    // ID3v2 tag parser
+    struct SongMetadata { juce::String title, artist; juce::Image artwork; };
+    static SongMetadata parseID3v2Tags (const juce::File& file);
 };
